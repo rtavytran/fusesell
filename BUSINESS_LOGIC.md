@@ -168,7 +168,7 @@ When there is any OPERATION in PREVIOUS OPERATIONS has Execution Status is in_qu
 ## Execution Control Rules
 
 ### Automatic Execution (Initial Runtime)
-1. Data Acquisition  Data Preparation  Lead Scoring  Initial Outreach (draft_write only)
+1. Data Acquisition → Data Preparation → Lead Scoring → Initial Outreach (draft_write only)
 2. Stop after draft generation
 3. Wait for human review
 
@@ -194,13 +194,13 @@ When there is any OPERATION in PREVIOUS OPERATIONS has Execution Status is in_qu
 ### Stage Dependencies
 ```
 Data Acquisition (required: website URL)
-    
+    ↓
 Data Preparation (required: raw customer data)
-    
+    ↓
 Lead Scoring (required: structured company data + pain points)
-    
+    ↓
 Initial Outreach (required: company data + lead scores + contact info)
-    
+    ↓
 Follow Up (required: previous interaction data)
 ```
 

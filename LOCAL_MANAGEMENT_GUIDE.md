@@ -588,7 +588,7 @@ python fusesell.py settings set team_001 `
 
 **Common Errors and Solutions:**
 
- **Error:** "Auto interaction settings must be a list"
+❌ **Error:** "Auto interaction settings must be a list"
 ```bash
 # WRONG - Missing square brackets
 --value-json '{"from_email": "sales@co.com", ...}'
@@ -597,7 +597,7 @@ python fusesell.py settings set team_001 `
 --value-json '[{"from_email": "sales@co.com", ...}]'
 ```
 
- **Error:** "Item 0 missing required field: email_cc"
+❌ **Error:** "Item 0 missing required field: email_cc"
 ```bash
 # WRONG - Missing email_cc field
 {"from_email": "sales@co.com", "from_name": "Sales", "from_number": "", "tool_type": "Email", "email_bcc": ""}
@@ -606,7 +606,7 @@ python fusesell.py settings set team_001 `
 {"from_email": "sales@co.com", "from_name": "Sales", "from_number": "", "tool_type": "Email", "email_cc": "", "email_bcc": ""}
 ```
 
- **Error:** "Invalid tool_type 'email'"
+❌ **Error:** "Invalid tool_type 'email'"
 ```bash
 # WRONG - Lowercase
 "tool_type": "email"
@@ -615,7 +615,7 @@ python fusesell.py settings set team_001 `
 "tool_type": "Email"
 ```
 
- **Error:** "Invalid email in email_cc"
+❌ **Error:** "Invalid email in email_cc"
 ```bash
 # WRONG - Spaces after commas
 "email_cc": "a@co.com, b@co.com"
@@ -689,13 +689,13 @@ For complex settings like `initial_outreach` and `follow_up`, use the new **`con
 ### Configuration Flowchart Logic
 
 ```
-User Input  Has Examples- 
- No Examples  Message Type-
-   Complete Prompt  Use directly as prompt
-   Instructions  Combine with appropriate default prompt*
- Has Examples  Template Mode-
-    AI Enhancement  Use examples + guidance for AI modifications  
-    Strict Template  Extract exact templates, replace only placeholders
+User Input → Has Examples? 
+├─ No Examples → Message Type?
+│  ├─ Complete Prompt → Use directly as prompt
+│  └─ Instructions → Combine with appropriate default prompt*
+└─ Has Examples → Template Mode?
+   ├─ AI Enhancement → Use examples + guidance for AI modifications  
+   └─ Strict Template → Extract exact templates, replace only placeholders
 
 *Default Prompts:
 - initial_outreach: "Create professional initial outreach emails for ##customer_name## on behalf of ##staff_name##."
@@ -1187,9 +1187,9 @@ python fusesell.py team list --org-id mycompany
 **Symptoms:** Emails still show old sender information
 
 **Checklist:**
-1.  Did you use the correct team_id when running the pipeline-
-2.  Did you verify settings with `settings view`-
-3.  Did you include `--team-id` flag when running fusesell.py-
+1. ✓ Did you use the correct team_id when running the pipeline?
+2. ✓ Did you verify settings with `settings view`?
+3. ✓ Did you include `--team-id` flag when running fusesell.py?
 
 **Verification:**
 ```bash
@@ -1285,12 +1285,12 @@ python fusesell.py settings set <TEAM_ID> \
 ```
 
 ### Field Quick Reference
-- `from_email`  Who sends the email
-- `from_name`  Name shown to recipient
-- `from_number`  Phone (use `""` if none)
-- `tool_type`  Always `"Email"` for emails
-- `email_cc`  Visible copies (or `""`)
-- `email_bcc`  Hidden copies (or `""`)
+- `from_email` → Who sends the email
+- `from_name` → Name shown to recipient
+- `from_number` → Phone (use `""` if none)
+- `tool_type` → Always `"Email"` for emails
+- `email_cc` → Visible copies (or `""`)
+- `email_bcc` → Hidden copies (or `""`)
 
 ### Common Commands
 ```bash
@@ -1310,11 +1310,11 @@ python fusesell.py --team-id <TEAM_ID> --dry-run [other options...]
 
 After completing this guide, you should be able to:
 
-1.  Create and manage teams locally
-2.  Create and manage products locally
-3.  Configure team-specific settings (especially auto interaction)
-4.  Run team-based sales pipelines with custom sender configurations
-5.  Troubleshoot common issues
+1. ✅ Create and manage teams locally
+2. ✅ Create and manage products locally
+3. ✅ Configure team-specific settings (especially auto interaction)
+4. ✅ Run team-based sales pipelines with custom sender configurations
+5. ✅ Troubleshoot common issues
 
 For advanced customization and development, see:
 - [DEVELOPER_GUIDE.md](DEVELOPER_GUIDE.md) - Extending the system

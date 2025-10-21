@@ -7,21 +7,21 @@ FuseSell Local is designed as a modular, pipeline-based system that processes le
 ### Core Components
 
 ```
-        
-   CLI Interface  Pipeline Engine   Stage Modules   
-        
-                                                       
-                                                       
-                                                       
-        
-   Validators          Data Manager           LLM Client    
-        
-                                                       
-                                                       
-                                                       
-        
-  Configuration       SQLite Database        OpenAI API     
-        
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   CLI Interface │────│ Pipeline Engine  │────│ Stage Modules   │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+         │                       │                       │
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│   Validators    │    │  Data Manager    │    │   LLM Client    │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
+         │                       │                       │
+         │                       │                       │
+         ▼                       ▼                       ▼
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────┐
+│  Configuration  │    │ SQLite Database  │    │  OpenAI API     │
+└─────────────────┘    └──────────────────┘    └─────────────────┘
 ```
 
 ## Module Documentation
@@ -99,7 +99,7 @@ FuseSell Local uses a comprehensive SQLite database with 14 normalized tables co
 - **Team Configuration**: `teams`, `team_settings`, `products`
 - **Advanced Features**: `prompts`, `scheduler_rules`, `extracted_files`
 
-** For complete database schema, relationships, and query examples, see [DATABASE.md](DATABASE.md)**
+**📋 For complete database schema, relationships, and query examples, see [DATABASE.md](DATABASE.md)**
 
 **Key Database Features:**
 - Single SQLite file (`fusesell_data/fusesell.db`) with complete data ownership
@@ -136,25 +136,25 @@ Team-specific configuration management with customizable prompts and settings.
 ### 1. Initialization
 
 ```
-CLI Arguments  Validation  Configuration Object  Pipeline Creation
+CLI Arguments → Validation → Configuration Object → Pipeline Creation
 ```
 
 ### 2. Stage Execution
 
 ```
-Input Data  Stage Validation  LLM Processing  Output Validation  Database Storage
+Input Data → Stage Validation → LLM Processing → Output Validation → Database Storage
 ```
 
 ### 3. Pipeline Flow
 
 ```
-Data Acquisition  Data Preparation  Lead Scoring  Initial Outreach  Follow-up
+Data Acquisition → Data Preparation → Lead Scoring → Initial Outreach → Follow-up
 ```
 
 ### 4. Error Handling
 
 ```
-Error Detection  Logging  Recovery Attempt  User Notification  Graceful Degradation
+Error Detection → Logging → Recovery Attempt → User Notification → Graceful Degradation
 ```
 
 ## Extension Points

@@ -2,11 +2,11 @@
 
 **Complete Guide to Querying and Managing Multiple Sales Processes**
 
-##  Overview
+## 🎯 Overview
 
 FuseSell Local provides comprehensive querying capabilities using a **server-compatible schema** that tracks individual sales processes with detailed execution history. Each sales process is identified by a unique task ID and contains complete per-stage execution records with input/output data, making debugging and analysis much more powerful.
 
-###  **Server-Compatible Schema Benefits:**
+### 🚀 **Server-Compatible Schema Benefits:**
 
 - **Per-Stage Tracking**: Individual operation records for each stage execution
 - **Detailed Input/Output**: JSON data for each stage's input and output
@@ -15,7 +15,7 @@ FuseSell Local provides comprehensive querying capabilities using a **server-com
 - **Enhanced Debugging**: Detailed failure analysis with exact error data
 - **Backward Compatibility**: `executions` VIEW maps to `llm_worker_task` for existing queries
 
-##  Quick Reference
+## 🔍 Quick Reference
 
 ### Essential Commands
 
@@ -33,7 +33,7 @@ python query_sales_processes.py --customer "Target Corp"
 python query_sales_processes.py --stage-result "task_id" "lead_scoring"
 ```
 
-##  Method 1: Using the Query Tool (Recommended)
+## 📋 Method 1: Using the Query Tool (Recommended)
 
 ### List Recent Sales Processes
 
@@ -51,7 +51,7 @@ python query_sales_processes.py --list --org-id "mycompany"
 **Output Example:**
 
 ```
- Recent Sales Processes:
+📋 Recent Sales Processes:
 ================================================================================
 1. Task ID: fusesell_20251010_141010_3fe0e655
    Customer: Customer: Target Corp, email: contact@targetcorp.com...
@@ -98,9 +98,9 @@ python query_sales_processes.py --details "fusesell_20251010_141010_3fe0e655"
 **Example Output:**
 
 ```
- Sales Process Details: fusesell_20251010_141010_3fe0e655
+📊 Sales Process Details: fusesell_20251010_141010_3fe0e655
 ================================================================================
- Task Information:
+📋 Task Information:
    Task ID: fusesell_20251010_141010_3fe0e655
    Organization: mycompany
    Status: completed
@@ -109,35 +109,35 @@ python query_sales_processes.py --details "fusesell_20251010_141010_3fe0e655"
    Customer: Target Corp, email: contact@targetcorp.com
    Language: english
 
- Stage Executions:
-    Data Acquisition (Runtime Index: 0)
+🔄 Stage Executions:
+   ✅ Data Acquisition (Runtime Index: 0)
       Status: success
       Executed: 2025-10-10 14:10:13
 
-    Data Preparation (Runtime Index: 1)
+   ✅ Data Preparation (Runtime Index: 1)
       Status: success
       Executed: 2025-10-10 14:10:15
 
-    Lead Scoring (Runtime Index: 2)
+   ✅ Lead Scoring (Runtime Index: 2)
       Status: success
       Executed: 2025-10-10 14:10:18
 
-    Initial Outreach (Runtime Index: 3)
+   ✅ Initial Outreach (Runtime Index: 3)
       Status: success
       Executed: 2025-10-10 14:10:22
 
-    Follow Up (Runtime Index: 4)
+   ✅ Follow Up (Runtime Index: 4)
       Status: success
       Executed: 2025-10-10 14:10:25
 
- Summary:
+📈 Summary:
    Total Stages: 5
    Completed: 5
    Failed: 0
    Lead Scores: 2
    Email Drafts: 4
 
- Lead Scores:
+🎯 Lead Scores:
    Product: FuseSell AI Pro
    Score: 85.5
    Date: 2025-10-10 14:10:18
@@ -146,7 +146,7 @@ python query_sales_processes.py --details "fusesell_20251010_141010_3fe0e655"
    Score: 72.3
    Date: 2025-10-10 14:10:18
 
- Email Drafts:
+📧 Email Drafts:
    Draft ID: draft_001
    Subject: Streamline Your Sales Process with AI-Powered Automation
    Created: 2025-10-10 14:10:22
@@ -170,7 +170,7 @@ python query_sales_processes.py --stage-result "task_id" "follow_up"
 - Analyze scoring breakdowns
 - Examine email draft variations
 
-##  Method 2: Using the Data Manager API (Server-Compatible)
+## 📊 Method 2: Using the Data Manager API (Server-Compatible)
 
 For programmatic access, use the new server-compatible Data Manager API:
 
@@ -180,26 +180,26 @@ from fusesell_local.utils.data_manager import LocalDataManager
 # Initialize data manager
 dm = LocalDataManager('./fusesell_data')
 
-#  Server-compatible task management
+# 🆕 Server-compatible task management
 task_with_ops = dm.get_task_with_operations("fusesell_20251010_141010_3fe0e655")
 print(f"Process status: {task_with_ops['status']}")
 print(f"Operations completed: {task_with_ops['summary']['completed_operations']}")
 
-#  Get all operations for a process (replaces stages)
+# 🆕 Get all operations for a process (replaces stages)
 operations = dm.get_operations_by_task("fusesell_20251010_141010_3fe0e655")
 for operation in operations:
     print(f"Operation: {operation['executor_name']} - Status: {operation['execution_status']}")
 
-#  Get execution timeline with proper indexing
+# 🆕 Get execution timeline with proper indexing
 timeline = dm.get_execution_timeline("fusesell_20251010_141010_3fe0e655")
 for op in timeline:
     print(f"Runtime {op['runtime_index']}, Chain {op['chain_index']}: {op['executor_name']}")
 
-#  Performance analysis
+# 🆕 Performance analysis
 metrics = dm.get_stage_performance_metrics("data_acquisition", org_id="mycompany")
 print(f"Success rate: {metrics['success_rate']:.1f}%")
 
-#  Find failed operations for debugging
+# 🆕 Find failed operations for debugging
 failed_ops = dm.find_failed_operations(org_id="mycompany", limit=5)
 for op in failed_ops:
     print(f"Failed: {op['executor_name']} - {op['error_summary']}")
@@ -215,7 +215,7 @@ for task in tasks:
     print(f"Task: {task['task_id']} - Created: {task['created_at']}")
 ```
 
-##  Method 3: Direct Database Queries
+## 🗄️ Method 3: Direct Database Queries
 
 For advanced users, query the SQLite database directly:
 
@@ -233,7 +233,7 @@ cursor.execute("""
            SUM(CASE WHEN sr.status = 'success' THEN 1 ELSE 0 END) as successful_stages
     FROM executions e
     LEFT JOIN stage_results sr ON e.execution_id = sr.execution_id
-    WHERE e.org_id = -
+    WHERE e.org_id = ?
     GROUP BY e.execution_id
     ORDER BY e.started_at DESC
     LIMIT 10
@@ -250,7 +250,7 @@ for row in cursor.fetchall():
 cursor.execute("""
     SELECT product_id, score, criteria_breakdown, created_at
     FROM lead_scores
-    WHERE execution_id = -
+    WHERE execution_id = ?
     ORDER BY score DESC
 """, ("fusesell_20251010_141010_3fe0e655",))
 
@@ -270,7 +270,7 @@ for row in cursor.fetchall():
 cursor.execute("""
     SELECT draft_id, subject, content, draft_type, created_at
     FROM email_drafts
-    WHERE execution_id = -
+    WHERE execution_id = ?
     ORDER BY created_at
 """, ("fusesell_20251010_141010_3fe0e655",))
 
@@ -284,38 +284,38 @@ for row in cursor.fetchall():
 conn.close()
 ```
 
-##  Key Database Tables (Server-Compatible Schema)
+## 🎯 Key Database Tables (Server-Compatible Schema)
 
 Understanding the new server-compatible schema:
 
-###  **Primary Tables (Server Schema)**
+### 🆕 **Primary Tables (Server Schema)**
 
 - **`tasks`**: Sales process records (equivalent to server's llm_worker_task)
   - Contains: task_id, plan_id, org_id, status, current_runtime_index, request_body
 - **`operations`**: Individual stage executions (equivalent to server's llm_worker_operation)
   - Contains: operation_id, task_id, executor_name, runtime_index, chain_index, execution_status, input_data, output_data
 
-###  **Results Tables**
+### 📊 **Results Tables**
 
 - **`lead_scores`**: Product evaluation scores and breakdowns
 - **`email_drafts`**: Generated email content and variations
 - **`customers`**: Customer profile information
 - **`customer_tasks`**: Customer task data (equivalent to server's gs_customer_llmtask)
 
-###  **Configuration Tables**
+### ⚙️ **Configuration Tables**
 
 - **`team_settings`**: Team-specific configurations
 - **`products`**: Available products for evaluation
 - **`gs_company_criteria`**: Scoring criteria definitions
 - **`llm_worker_plan`**: Workflow plan definitions
 
-###  **Backward Compatibility**
+### 🔄 **Backward Compatibility**
 
 - **`executions`**: Legacy execution records (maintained for compatibility)
 - **`stage_results`**: Legacy stage results (maintained for compatibility)
 - **Compatibility views**: Automatically map old queries to new schema
 
-##  Common Query Patterns
+## 🔍 Common Query Patterns
 
 ### Find Failed Processes
 
@@ -361,7 +361,7 @@ python query_sales_processes.py --details "task_id_1"
 python query_sales_processes.py --details "task_id_2"
 ```
 
-##  Monitoring and Analytics
+## 📊 Monitoring and Analytics
 
 ### Process Success Rates
 
@@ -408,7 +408,7 @@ GROUP BY stage_name
 ORDER BY success_rate DESC;
 ```
 
-##  Best Practices
+## 🚀 Best Practices
 
 ### 1. Use Task IDs for Unique Identification
 
@@ -442,7 +442,7 @@ Consider implementing data retention policies:
 - Keep high-value leads for longer analysis
 - Backup important customer data
 
-##  Troubleshooting
+## 🔧 Troubleshooting
 
 ### Common Issues
 
@@ -480,7 +480,7 @@ conn.close()
 python query_sales_processes.py --list --limit 5
 ```
 
-##  Server-Compatible Database Schema
+## 🏗️ Server-Compatible Database Schema
 
 FuseSell Local now uses **100% server-compatible table names** for seamless integration:
 
@@ -488,10 +488,10 @@ FuseSell Local now uses **100% server-compatible table names** for seamless inte
 
 | Table Name | Purpose | Server Compatibility |
 |------------|---------|---------------------|
-| `llm_worker_task` | Task management and process tracking |  **Exact server match** |
-| `llm_worker_operation` | Individual stage execution records |  **Exact server match** |
-| `gs_customer_llmtask` | Customer data storage |  **Exact server match** |
-| `executions` (VIEW) | Backward compatibility mapping |  **Maps to llm_worker_task** |
+| `llm_worker_task` | Task management and process tracking | ✅ **Exact server match** |
+| `llm_worker_operation` | Individual stage execution records | ✅ **Exact server match** |
+| `gs_customer_llmtask` | Customer data storage | ✅ **Exact server match** |
+| `executions` (VIEW) | Backward compatibility mapping | ✅ **Maps to llm_worker_task** |
 
 ### Schema Benefits
 
@@ -523,7 +523,7 @@ FROM gs_customer_llmtask
 WHERE org_id = 'mycompany';
 ```
 
-##  Related Documentation
+## 📚 Related Documentation
 
 - **[README.md](README.md)**: Main usage guide and installation
 - **[VERIFICATION_REPORT.md](VERIFICATION_REPORT.md)**: Server schema compliance verification
@@ -533,7 +533,7 @@ WHERE org_id = 'mycompany';
 
 ---
 
-**Need Help-**
+**Need Help?**
 
 - Check the troubleshooting section above
 - Review the server schema compliance in `VERIFICATION_REPORT.md`

@@ -7,40 +7,40 @@ FuseSell Local is a Python-based sales automation pipeline that converts server-
 ## Architecture Overview
 
 ```
-
-                    FuseSell Local Architecture              
-
- CLI Interface (fusesell.py)                                
-  Argument parsing and validation                        
-  Configuration object creation                          
-  Pipeline execution orchestration                       
-
- Pipeline Engine (fusesell_local/pipeline.py)               
-  Sequential stage execution                             
-  Context management and data flow                       
-  Error handling and recovery                            
-  Process continuation support                           
-
- Stage Modules (fusesell_local/stages/)                     
-  BaseStage - Abstract base class                        
-  DataAcquisitionStage - Multi-source data collection    
-  DataPreparationStage - AI-powered data structuring     
-  LeadScoringStage - Product-customer fit evaluation     
-  InitialOutreachStage - Email draft generation          
-  FollowUpStage - Context-aware follow-up sequences      
-
- Utilities (fusesell_local/utils/)                          
-  DataManager - SQLite database operations               
-  LLMClient - OpenAI API integration                     
-  EventScheduler - Database-based event scheduling       
-  TimezoneDetector - Timezone detection from location    
-  Validators - Input validation and sanitization         
-
- Configuration (fusesell_local/config/)                     
-  Team-specific settings                                 
-  Customizable LLM prompts                               
-  Scoring criteria configuration                         
-
+┌─────────────────────────────────────────────────────────────┐
+│                    FuseSell Local Architecture              │
+├─────────────────────────────────────────────────────────────┤
+│ CLI Interface (fusesell.py)                                │
+│ ├── Argument parsing and validation                        │
+│ ├── Configuration object creation                          │
+│ └── Pipeline execution orchestration                       │
+├─────────────────────────────────────────────────────────────┤
+│ Pipeline Engine (fusesell_local/pipeline.py)               │
+│ ├── Sequential stage execution                             │
+│ ├── Context management and data flow                       │
+│ ├── Error handling and recovery                            │
+│ └── Process continuation support                           │
+├─────────────────────────────────────────────────────────────┤
+│ Stage Modules (fusesell_local/stages/)                     │
+│ ├── BaseStage - Abstract base class                        │
+│ ├── DataAcquisitionStage - Multi-source data collection    │
+│ ├── DataPreparationStage - AI-powered data structuring     │
+│ ├── LeadScoringStage - Product-customer fit evaluation     │
+│ ├── InitialOutreachStage - Email draft generation          │
+│ └── FollowUpStage - Context-aware follow-up sequences      │
+├─────────────────────────────────────────────────────────────┤
+│ Utilities (fusesell_local/utils/)                          │
+│ ├── DataManager - SQLite database operations               │
+│ ├── LLMClient - OpenAI API integration                     │
+│ ├── EventScheduler - Database-based event scheduling       │
+│ ├── TimezoneDetector - Timezone detection from location    │
+│ └── Validators - Input validation and sanitization         │
+├─────────────────────────────────────────────────────────────┤
+│ Configuration (fusesell_local/config/)                     │
+│ ├── Team-specific settings                                 │
+│ ├── Customizable LLM prompts                               │
+│ └── Scoring criteria configuration                         │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## Core Components
