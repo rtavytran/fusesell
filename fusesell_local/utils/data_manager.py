@@ -2144,47 +2144,72 @@ class LocalDataManager:
                         'plan_name': 'FuseSell AI (v1.025)',
                         'project_code': 'FUSESELL',
                         'team_name': 'RTA Default Team',
-                        'organization_settings': json.dumps({
+                        'gs_team_organization': json.dumps({
                             'name': 'RTA',
                             'industry': 'Technology',
                             'website': 'https://rta.vn'
                         }),
-                        'sales_rep_settings': json.dumps([{
+                        'gs_team_rep': json.dumps([{
                             'name': 'Sales Team',
                             'email': 'sales@rta.vn',
                             'position': 'Sales Representative',
                             'is_primary': True
                         }]),
-                        'product_settings': json.dumps([
+                        'gs_team_product': json.dumps([
                             {'product_id': 'prod-12345678-1234-1234-1234-123456789012',
-                                'enabled': True, 'priority': 1},
+                             'enabled': True, 'priority': 1},
                             {'product_id': 'prod-87654321-4321-4321-4321-210987654321',
-                                'enabled': True, 'priority': 2}
+                             'enabled': True, 'priority': 2}
                         ]),
-                        'schedule_time_settings': json.dumps({
+                        'gs_team_schedule_time': json.dumps({
                             'business_hours_start': '08:00',
                             'business_hours_end': '20:00',
                             'default_delay_hours': 2,
                             'respect_weekends': True
                         }),
-                        'initial_outreach_settings': json.dumps({
+                        'gs_team_initial_outreach': json.dumps({
                             'default_tone': 'professional',
-                            'approaches': ['professional_direct', 'consultative', 'industry_expert', 'relationship_building'],
+                            'approaches': [
+                                'professional_direct',
+                                'consultative',
+                                'industry_expert',
+                                'relationship_building'
+                            ],
                             'subject_line_variations': 4
                         }),
-                        'follow_up_settings': json.dumps({
+                        'gs_team_follow_up': json.dumps({
                             'max_follow_ups': 5,
                             'default_interval_days': 3,
-                            'strategies': ['gentle_reminder', 'value_add', 'alternative_approach', 'final_attempt', 'graceful_farewell']
+                            'strategies': [
+                                'gentle_reminder',
+                                'value_add',
+                                'alternative_approach',
+                                'final_attempt',
+                                'graceful_farewell'
+                            ]
+                        }),
+                        'gs_team_auto_interaction': json.dumps({
+                            'enabled': True,
+                            'handoff_threshold': 0.8,
+                            'monitoring': 'standard'
+                        }),
+                        'gs_team_followup_schedule_time': json.dumps({
+                            'timezone': 'Asia/Ho_Chi_Minh',
+                            'window': 'business_hours'
+                        }),
+                        'gs_team_birthday_email': json.dumps({
+                            'enabled': True,
+                            'template': 'birthday_2025'
                         })
                     }
 
                     cursor.execute("""
                         INSERT INTO team_settings 
                         (id, team_id, org_id, plan_id, plan_name, project_code, team_name,
-                         organization_settings, sales_rep_settings, product_settings,
-                         schedule_time_settings, initial_outreach_settings, follow_up_settings)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         gs_team_organization, gs_team_rep, gs_team_product,
+                         gs_team_schedule_time, gs_team_initial_outreach, gs_team_follow_up,
+                         gs_team_auto_interaction, gs_team_followup_schedule_time, gs_team_birthday_email)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         default_team_settings['id'],
                         default_team_settings['team_id'],
@@ -2193,12 +2218,15 @@ class LocalDataManager:
                         default_team_settings['plan_name'],
                         default_team_settings['project_code'],
                         default_team_settings['team_name'],
-                        default_team_settings['organization_settings'],
-                        default_team_settings['sales_rep_settings'],
-                        default_team_settings['product_settings'],
-                        default_team_settings['schedule_time_settings'],
-                        default_team_settings['initial_outreach_settings'],
-                        default_team_settings['follow_up_settings']
+                        default_team_settings['gs_team_organization'],
+                        default_team_settings['gs_team_rep'],
+                        default_team_settings['gs_team_product'],
+                        default_team_settings['gs_team_schedule_time'],
+                        default_team_settings['gs_team_initial_outreach'],
+                        default_team_settings['gs_team_follow_up'],
+                        default_team_settings['gs_team_auto_interaction'],
+                        default_team_settings['gs_team_followup_schedule_time'],
+                        default_team_settings['gs_team_birthday_email']
                     ))
 
                     self.logger.debug("Initialized default team settings")

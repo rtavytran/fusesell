@@ -2,6 +2,14 @@
 
 All notable changes to FuseSell Local will be documented in this file.
 
+# [1.2.2] - 2025-10-21
+
+### Added
+- LocalDataManager regression tests covering product/team CRUD flows and sales process tracking helpers.
+
+### Fixed
+- Default team settings seeding now targets the `gs_team_*` columns, preventing initialization failures on fresh databases.
+
 # [1.2.1] - 2025-10-21
 
 ### Changed
