@@ -2,6 +2,14 @@
 
 All notable changes to FuseSell Local will be documented in this file.
 
+# [1.2.1] - 2025-10-21
+
+### Changed
+- Expose `__version__`, `__author__`, and `__description__` at the top-level `fusesell` module for easier runtime inspection.
+
+### Fixed
+- `import fusesell; fusesell.__version__` now reports the installed version instead of `unknown`.
+
 ## [1.2.0] - 2025-10-20
 
 ### Added
