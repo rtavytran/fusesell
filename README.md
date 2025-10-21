@@ -1,4 +1,4 @@
-﻿# FuseSell Local
+# FuseSell Local
 
 **Complete AI-powered sales automation pipeline that runs entirely on your local machine.**
 
@@ -6,19 +6,19 @@ FuseSell Local is a production-ready implementation of the FuseSell AI sales aut
 
 > Latest release: `fusesell==1.2.0` is available on PyPI via `pip install fusesell`.
 
-## ðŸš€ Complete Pipeline Overview
+## [rocket] Complete Pipeline Overview
 
 FuseSell Local processes leads through a complete 5-stage AI-powered pipeline:
 
-1. **Data Acquisition** âœ… - Multi-source customer data extraction (websites, business cards, social media)
-2. **Data Preparation** âœ… - AI-powered customer profiling and pain point analysis
-3. **Lead Scoring** âœ… - Advanced product-customer fit evaluation with detailed scoring
-4. **Initial Outreach** âœ… - Intelligent email generation with multiple personalized approaches
-5. **Follow-up** âœ… - Context-aware follow-up sequences with interaction history analysis
+1. **Data Acquisition** [done] - Multi-source customer data extraction (websites, business cards, social media)
+2. **Data Preparation** [done] - AI-powered customer profiling and pain point analysis
+3. **Lead Scoring** [done] - Advanced product-customer fit evaluation with detailed scoring
+4. **Initial Outreach** [done] - Intelligent email generation with multiple personalized approaches
+5. **Follow-up** [done] - Context-aware follow-up sequences with interaction history analysis
 
 **Status: 100% Complete - Production Ready**
 
-## ðŸš€ Quick Start
+## [rocket] Quick Start
 
 ### Installation
 
@@ -135,7 +135,7 @@ When embedding FuseSell inside ephemeral interpreter services, consider supplyin
    ])
    ```
 
-## ðŸ“‹ Complete Usage Examples
+## [clipboard] Complete Usage Examples
 
 ### Example 1: Full Pipeline - Website to Follow-up
 
@@ -307,7 +307,7 @@ python fusesell.py \
   --continue-action "approve_and_continue"
 ```
 
-## ðŸ“Š Command Reference
+## [chart] Command Reference
 
 ### Required Arguments
 
@@ -398,7 +398,7 @@ python fusesell.py \
 | `data_preparation` | AI customer analysis  | Automatic (uses previous stage data)     |
 | `lead_scoring`     | Product-customer fit  | Automatic (uses previous stage data)     |
 | `initial_outreach` | Email generation      | `--action draft_write`                   |
-| `follow_up`        | Follow-up sequences   | `--action draft_write`, `--execution-id` |## ðŸŒ Enha
+| `follow_up`        | Follow-up sequences   | `--action draft_write`, `--execution-id` |## [globe] Enha
 nced Web Scraping with Serper API
 
 **Optional but Recommended:** Add `--serper-api-key` for better data collection:
@@ -414,16 +414,16 @@ python fusesell.py \
 ```
 
 **Benefits:**
-- ðŸŒ **Better Website Scraping**: More reliable content extraction
-- ðŸ” **Company Research**: Automatic Google search for company info
-- ðŸ“± **Social Media Access**: Enhanced LinkedIn/Facebook scraping
-- ðŸš« **Graceful Fallback**: Works without Serper API (shows warnings)
+- [globe] **Better Website Scraping**: More reliable content extraction
+- [search] **Company Research**: Automatic Google search for company info
+- [mobile] **Social Media Access**: Enhanced LinkedIn/Facebook scraping
+- [stop] **Graceful Fallback**: Works without Serper API (shows warnings)
 
-**Get Serper API Key:** Visit [serper.dev](https://serper.dev) â†’ Sign up â†’ Get free API key
+**Get Serper API Key:** Visit [serper.dev](https://serper.dev) -> Sign up -> Get free API key
 
-## ðŸ”„ Complete Pipeline Stages
+## [cycle] Complete Pipeline Stages
 
-### 1. Data Acquisition âœ…
+### 1. Data Acquisition [done]
 
 **Purpose:** Multi-source customer data extraction
 
@@ -441,7 +441,7 @@ python fusesell.py \
 
 **Output:** Comprehensive customer profile with contact information
 
-### 2. Data Preparation âœ…
+### 2. Data Preparation [done]
 
 **Purpose:** AI-powered customer profiling and analysis
 
@@ -455,7 +455,7 @@ python fusesell.py \
 
 **Output:** Enriched customer profile with pain points and business insights
 
-### 3. Lead Scoring âœ…
+### 3. Lead Scoring [done]
 
 **Purpose:** Advanced product-customer fit evaluation
 
@@ -469,7 +469,7 @@ python fusesell.py \
 
 **Output:** Detailed scoring breakdown with product recommendations and justifications
 
-### 4. Initial Outreach âœ…
+### 4. Initial Outreach [done]
 
 **Purpose:** Intelligent email generation and draft management
 
@@ -487,7 +487,7 @@ python fusesell.py \
 
 **Output:** Multiple personalized email drafts with management tools
 
-### 5. Follow-up âœ…
+### 5. Follow-up [done]
 
 **Purpose:** Context-aware follow-up sequences with interaction analysis
 
@@ -509,7 +509,7 @@ python fusesell.py \
 - **Context Awareness**: References previous interactions appropriately
 - **Engagement Adaptation**: Adjusts tone and approach based on customer behavior
 
-**Output:** Context-aware follow-up emails with sequence management## ðŸ” M
+**Output:** Context-aware follow-up emails with sequence management## [search] M
 anaging Multiple Sales Processes
 
 When running multiple sales processes, use the querying tools:
@@ -528,21 +528,21 @@ python query_sales_processes.py --customer "Target Corp"
 python query_sales_processes.py --stage-result "task_id" "lead_scoring"
 ```
 
-**ðŸ“š Complete querying guide: [QUERYING_GUIDE.md](QUERYING_GUIDE.md)**
+**[books] Complete querying guide: [QUERYING_GUIDE.md](QUERYING_GUIDE.md)**
 
-## ðŸ“ Data Storage & Configuration
+## [folder] Data Storage & Configuration
 
 All data is stored locally in the `fusesell_data` directory with **100% server-compatible schema**:
 
 ```
 fusesell_data/
-â”œâ”€â”€ fusesell.db              # SQLite database
-â”œâ”€â”€ config/                  # Configuration files
-â”‚   â”œâ”€â”€ prompts.json        # LLM prompts
-â”‚   â”œâ”€â”€ scoring_criteria.json
-â”‚   â””â”€â”€ email_templates.json
-â”œâ”€â”€ drafts/                 # Generated email drafts
-â””â”€â”€ logs/                   # Execution logs
++--- fusesell.db              # SQLite database
++--- config/                  # Configuration files
+|   +--- prompts.json        # LLM prompts
+|   +--- scoring_criteria.json
+|   +--- email_templates.json
++--- drafts/                 # Generated email drafts
++--- logs/                   # Execution logs
 ```
 
 ### Database Tables
@@ -553,7 +553,7 @@ fusesell_data/
 - `email_drafts` - Generated email drafts and variations
 - `stage_results` - Intermediate results from each stage
 
-### ðŸ—ï¸ Server-Compatible Database Schema
+### [build] Server-Compatible Database Schema
 
 FuseSell Local uses **exact server table names** for seamless integration:
 
@@ -596,9 +596,9 @@ Customize lead scoring weights and criteria:
 }
 ```
 
-## ðŸŽ¯ Key Features
+## [target] Key Features
 
-### âœ… Complete AI-Powered Sales Automation
+### [done] Complete AI-Powered Sales Automation
 
 - **Multi-Source Data Collection**: Websites, business cards (OCR), LinkedIn, Facebook
 - **AI Customer Profiling**: Pain point analysis, company research, financial assessment
@@ -606,7 +606,7 @@ Customize lead scoring weights and criteria:
 - **Personalized Email Generation**: 4 different approaches with subject line variations
 - **Context-Aware Follow-ups**: Smart sequence management with interaction history analysis
 
-### âœ… 100% Local Execution & Privacy
+### [done] 100% Local Execution & Privacy
 
 - **Complete Data Ownership**: All customer data stays on your machine
 - **No External Dependencies**: Except OpenAI API for LLM processing
@@ -614,7 +614,7 @@ Customize lead scoring weights and criteria:
 - **Event-Based Scheduling**: Database events for external app integration
 - **Comprehensive Logging**: Detailed execution tracking and debugging
 
-### âœ… Production-Ready Architecture
+### [done] Production-Ready Architecture
 
 - **Action-Based Routing**: draft_write, draft_rewrite, send, close operations
 - **Error Handling**: Graceful degradation with fallback templates
@@ -622,13 +622,13 @@ Customize lead scoring weights and criteria:
 - **Timezone Intelligence**: Optimal email timing with business hours respect
 - **Extensible Design**: Easy customization and integration
 
-### âœ… Advanced Intelligence Features
+### [done] Advanced Intelligence Features
 
 - **Personalization Scoring**: 0-100 scoring based on customer data usage
 - **Engagement Analysis**: Customer interaction patterns and sentiment detection
 - **Readiness Assessment**: Outreach readiness scoring with recommendations
-- **Sequence Management**: Automatic follow-up progression (1st â†’ 2nd â†’ 3rd â†’ final)
-- **Respectful Automation**: Smart limits and graceful closure handling## ðŸ› ï¸ Trou
+- **Sequence Management**: Automatic follow-up progression (1st -> 2nd -> 3rd -> final)
+- **Respectful Automation**: Smart limits and graceful closure handling## [tools] Trou
 bleshooting
 
 ### Common Issues
@@ -699,13 +699,13 @@ python fusesell.py \
   --dry-run
 ```
 
-**ðŸ“š Complete troubleshooting guide: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)**
+**[books] Complete troubleshooting guide: [TROUBLESHOOTING.md](TROUBLESHOOTING.md)**
 
-## ðŸ† Production Status
+## [trophy] Production Status
 
 **FuseSell Local is 100% complete and production-ready!**
 
-### âœ… All Components Complete:
+### [done] All Components Complete:
 
 - **CLI Interface**: 25+ configuration options with comprehensive validation
 - **Pipeline Engine**: Complete 5-stage orchestration with business logic
@@ -714,59 +714,59 @@ python fusesell.py \
 - **Stage Implementations**: All 5 stages production-ready (7,400+ lines of code)
 - **Documentation**: Complete user guides, technical docs, and troubleshooting
 
-### âœ… Stage Implementation Status:
+### [done] Stage Implementation Status:
 
 | Stage                | Status      | Lines  | Key Features                                   |
 | -------------------- | ----------- | ------ | ---------------------------------------------- |
-| **Data Acquisition** | âœ… Complete | 1,422  | Multi-source extraction, OCR, social media     |
-| **Data Preparation** | âœ… Complete | 1,201  | AI profiling, pain point analysis              |
-| **Lead Scoring**     | âœ… Complete | 1,426  | Product-customer fit evaluation                |
-| **Initial Outreach** | âœ… Complete | 1,600+ | Intelligent email generation, draft management |
-| **Follow-up**        | âœ… Complete | 1,800+ | Context-aware sequences, interaction analysis  |
+| **Data Acquisition** | [done] Complete | 1,422  | Multi-source extraction, OCR, social media     |
+| **Data Preparation** | [done] Complete | 1,201  | AI profiling, pain point analysis              |
+| **Lead Scoring**     | [done] Complete | 1,426  | Product-customer fit evaluation                |
+| **Initial Outreach** | [done] Complete | 1,600+ | Intelligent email generation, draft management |
+| **Follow-up**        | [done] Complete | 1,800+ | Context-aware sequences, interaction analysis  |
 
-## ðŸ“ Directory Structure
+## [folder] Directory Structure
 
 ```
 fusesell-local/
-â”œâ”€â”€ fusesell.py                 # Main CLI entry point
-â”œâ”€â”€ requirements.txt            # Python dependencies
-â”œâ”€â”€ README.md                   # This file
-â”œâ”€â”€ fusesell_local/            # Main package
-â”‚   â”œâ”€â”€ __init__.py
-â”‚   â”œâ”€â”€ pipeline.py            # Pipeline orchestrator
-â”‚   â”œâ”€â”€ stages/                # Pipeline stages
-â”‚   â”‚   â”œâ”€â”€ __init__.py
-â”‚   â”‚   â”œâ”€â”€ base_stage.py      # Base stage interface
-â”‚   â”‚   â”œâ”€â”€ data_acquisition.py
-â”‚   â”‚   â”œâ”€â”€ data_preparation.py
-â”‚   â”‚   â”œâ”€â”€ lead_scoring.py
-â”‚   â”‚   â”œâ”€â”€ initial_outreach.py
-â”‚   â”‚   â””â”€â”€ follow_up.py
-â”‚   â”œâ”€â”€ utils/                 # Utilities
-â”‚   â”‚   â”œâ”€â”€ __init__.py
-â”‚   â”‚   â”œâ”€â”€ data_manager.py    # SQLite database manager
-â”‚   â”‚   â”œâ”€â”€ llm_client.py      # OpenAI API client
-â”‚   â”‚   â”œâ”€â”€ validators.py      # Input validation
-â”‚   â”‚   â””â”€â”€ logger.py          # Logging configuration
-â”‚   â””â”€â”€ config/                # Configuration
-â”‚       â””â”€â”€ __init__.py
-â””â”€â”€ fusesell_data/             # Local data storage
-    â”œâ”€â”€ config/                # Configuration files
-    â”‚   â”œâ”€â”€ prompts.json       # LLM prompts
-    â”‚   â”œâ”€â”€ scoring_criteria.json
-    â”‚   â””â”€â”€ email_templates.json
-    â”œâ”€â”€ drafts/                # Generated email drafts
-    â””â”€â”€ logs/                  # Execution logs
++--- fusesell.py                 # Main CLI entry point
++--- requirements.txt            # Python dependencies
++--- README.md                   # This file
++--- fusesell_local/            # Main package
+|   +--- __init__.py
+|   +--- pipeline.py            # Pipeline orchestrator
+|   +--- stages/                # Pipeline stages
+|   |   +--- __init__.py
+|   |   +--- base_stage.py      # Base stage interface
+|   |   +--- data_acquisition.py
+|   |   +--- data_preparation.py
+|   |   +--- lead_scoring.py
+|   |   +--- initial_outreach.py
+|   |   +--- follow_up.py
+|   +--- utils/                 # Utilities
+|   |   +--- __init__.py
+|   |   +--- data_manager.py    # SQLite database manager
+|   |   +--- llm_client.py      # OpenAI API client
+|   |   +--- validators.py      # Input validation
+|   |   +--- logger.py          # Logging configuration
+|   +--- config/                # Configuration
+|       +--- __init__.py
++--- fusesell_data/             # Local data storage
+    +--- config/                # Configuration files
+    |   +--- prompts.json       # LLM prompts
+    |   +--- scoring_criteria.json
+    |   +--- email_templates.json
+    +--- drafts/                # Generated email drafts
+    +--- logs/                  # Execution logs
 ```
 
-## ðŸ”’ Security & Privacy
+## [lock] Security & Privacy
 
 - **Complete data ownership**: All customer data stays on your machine
 - **API key security**: Keys are only used for LLM calls, never stored
 - **Input validation**: Prevents injection attacks and validates all inputs
 - **Local processing**: No external dependencies except for LLM API calls
 
-## ðŸ“š Additional Documentation
+## [books] Additional Documentation
 
 ### User Documentation
 - **[QUERYING_GUIDE.md](QUERYING_GUIDE.md)** - Managing multiple sales processes
@@ -782,7 +782,7 @@ fusesell-local/
 - **[business_logic.md](business_logic.md)** - Business logic and orchestration rules
 - **[CHANGELOG.md](CHANGELOG.md)** - Version history and updates
 
-## ðŸš€ Ready for Production Use
+## [rocket] Ready for Production Use
 
 - **End-to-End Pipeline**: Complete sales automation workflow
 - **Local Data Ownership**: Full privacy and control
@@ -790,7 +790,7 @@ fusesell-local/
 - **Integration Ready**: Database events for external app integration
 - **Comprehensive Testing**: Dry-run mode and extensive error handling
 
-## ðŸ’¡ Performance Tips
+## [idea] Performance Tips
 
 ### 1. Use Dry Run for Testing
 
@@ -820,7 +820,7 @@ python fusesell.py ... --data-dir "./project_a_data"
 python fusesell.py ... --data-dir "./project_b_data"
 ```
 
-## ðŸ¤ Support
+## [handshake] Support
 
 For issues, questions, or contributions:
 - Check the troubleshooting guide for common issues
@@ -830,4 +830,4 @@ For issues, questions, or contributions:
 
 ---
 
-**FuseSell Local - Complete AI Sales Automation, 100% Local, 100% Private** ðŸš€
+**FuseSell Local - Complete AI Sales Automation, 100% Local, 100% Private** [rocket]

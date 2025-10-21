@@ -359,7 +359,7 @@ MemoryError: Unable to allocate array
    ```
 
 3. **Increase virtual memory** (Windows):
-   - Control Panel → System → Advanced → Performance Settings → Advanced → Virtual Memory
+   - Control Panel  System  Advanced  Performance Settings  Advanced  Virtual Memory
 
 #### Issue: "Slow LLM responses"
 **Symptoms:**
