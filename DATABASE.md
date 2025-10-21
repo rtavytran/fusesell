@@ -8,7 +8,7 @@ FuseSell Local uses a single SQLite database file (`fusesell_data/fusesell.db`) 
 
 ```
 fusesell_data/
-└── fusesell.db          # Single SQLite file containing all tables
+ fusesell.db          # Single SQLite file containing all tables
 ```
 
 ## Complete Database Schema
@@ -153,15 +153,15 @@ CREATE INDEX idx_email_drafts_execution_id ON email_drafts(execution_id);
 ## Data Relationships
 
 ```
-executions (1) ──────── (many) stage_results
-    │
-    ├─────────── (many) lead_scores
-    │
-    └─────────── (many) email_drafts
+executions (1)  (many) stage_results
+    
+     (many) lead_scores
+    
+     (many) email_drafts
 
-customers (1) ────────── (many) lead_scores
-    │
-    └─────────── (many) email_drafts
+customers (1)  (many) lead_scores
+    
+     (many) email_drafts
 ```
 
 ## Data Flow by Stage
@@ -664,31 +664,31 @@ CREATE TABLE extracted_files (
 ## Updated Data Relationships
 
 ```
-executions (1) ──────── (many) stage_results
-    │
-    ├─────────── (many) lead_scores
-    │
-    └─────────── (many) email_drafts
+executions (1)  (many) stage_results
+    
+     (many) lead_scores
+    
+     (many) email_drafts
 
-customers (1) ────────── (many) lead_scores
-    │
-    ├─────────── (many) email_drafts
-    │
-    └─────────── (many) customer_tasks
+customers (1)  (many) lead_scores
+    
+     (many) email_drafts
+    
+     (many) customer_tasks
 
-tasks (1) ──────────── (many) operations
-    │
-    └─────────── (many) customer_tasks
+tasks (1)  (many) operations
+    
+     (many) customer_tasks
 
-teams (1) ──────────── (1) team_settings
-    │
-    └─────────── (many) prompts
+teams (1)  (1) team_settings
+    
+     (many) prompts
 
-products (many) ──────── (many) lead_scores (via product_id)
+products (many)  (many) lead_scores (via product_id)
 
-scheduler_rules (many) ── (1) teams (via team_id)
+scheduler_rules (many)  (1) teams (via team_id)
 
-extracted_files (many) ── (1) teams (via team_id)
+extracted_files (many)  (1) teams (via team_id)
 ```
 
 ## Complete Data Storage Strategy
