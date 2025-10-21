@@ -4,6 +4,8 @@
 
 FuseSell Local is a production-ready implementation of the FuseSell AI sales automation system, converted from server-based YAML workflows to a comprehensive Python command-line tool with full data ownership and privacy control.
 
+> Latest release: `fusesell==1.2.0` is available on PyPI via `pip install fusesell`.
+
 ## ðŸš€ Complete Pipeline Overview
 
 FuseSell Local processes leads through a complete 5-stage AI-powered pipeline:

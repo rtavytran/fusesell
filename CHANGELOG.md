@@ -12,6 +12,7 @@ All notable changes to FuseSell Local will be documented in this file.
 - Distribution renamed to `fusesell` to align with upcoming PyPI publication; console entry point now resolves to `fusesell_local.cli:main`.
 - CLI implementation moved into `fusesell_local/cli.py`, with top-level `fusesell.py` delegating for backward compatibility.
 - Documentation refreshed to instruct `pip install fusesell` and demonstrate programmatic CLI reuse.
+- Published version `1.2.0` to PyPI under the `fusesell` distribution name.
 
 ### Fixed
 - Ensured package metadata includes the CLI module so installations via pip expose the `fusesell` console script.
