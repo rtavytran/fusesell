@@ -1,0 +1,74 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fusesell"
+version = "1.2.0"
+description = "Local implementation of FuseSell AI sales automation pipeline"
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.8"
+authors = [
+    { name = "FuseSell Team", email = "team@fusesell.ai" }
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = [
+    "openai>=1.0.0",
+    "requests>=2.25.0",
+    "beautifulsoup4>=4.9.0",
+    "lxml>=4.6.0",
+    "python-dateutil>=2.8.0",
+    "pytz>=2021.1",
+]
+
+[project.optional-dependencies]
+ocr = [
+    "pytesseract>=0.3.8",
+    "pillow>=8.0.0",
+    "easyocr>=1.6.0",
+]
+pdf = [
+    "PyPDF2>=3.0.0",
+    "PyMuPDF>=1.20.0",
+]
+gcv = [
+    "google-cloud-vision>=2.0.0",
+]
+dev = [
+    "psutil>=5.8.0",
+    "pytest>=8.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/rtavytran/fusesell"
+Source = "https://github.com/rtavytran/fusesell"
+Issues = "https://github.com/rtavytran/fusesell/issues"
+Changelog = "https://github.com/rtavytran/fusesell/blob/main/CHANGELOG.md"
+
+[project.scripts]
+fusesell = "fusesell_local.cli:main"
+
+[tool.setuptools]
+include-package-data = true
+packages = [
+    "fusesell_local",
+    "fusesell_local.config",
+    "fusesell_local.stages",
+    "fusesell_local.tests",
+    "fusesell_local.utils",
+]
+py-modules = ["fusesell"]
+
+[tool.setuptools.package-data]
+fusesell_local = ["config/*.json"]
