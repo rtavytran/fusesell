@@ -255,6 +255,12 @@ class InitialOutreachStage(BaseStage):
             
             # Check if immediate sending is requested
             send_immediately = input_data.get('send_immediately', False)
+            reminder_context = self._build_initial_reminder_context(
+                draft,
+                recipient_address,
+                recipient_name,
+                context
+            )
             
             # Schedule the email event
             schedule_result = scheduler.schedule_email_event(
@@ -265,7 +271,8 @@ class InitialOutreachStage(BaseStage):
                 team_id=input_data.get('team_id'),
                 customer_timezone=input_data.get('customer_timezone'),
                 email_type='initial',
-                send_immediately=send_immediately
+                send_immediately=send_immediately,
+                reminder_context=reminder_context
             )
             
             if schedule_result['success']:
@@ -293,6 +300,68 @@ class InitialOutreachStage(BaseStage):
                 'message': f'Email scheduling failed: {str(e)}',
                 'error': str(e)
             }
+
+    def _build_initial_reminder_context(
+        self,
+        draft: Dict[str, Any],
+        recipient_address: str,
+        recipient_name: str,
+        context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Build reminder_task metadata for scheduled initial outreach emails.
+        """
+        input_data = context.get('input_data', {})
+        org_id = input_data.get('org_id', 'default') or 'default'
+        customer_id = input_data.get('customer_id') or context.get('execution_id') or 'unknown'
+        task_id = context.get('execution_id') or input_data.get('task_id') or 'unknown_task'
+        team_id = input_data.get('team_id')
+        team_name = input_data.get('team_name')
+        language = input_data.get('language')
+        customer_name = input_data.get('customer_name')
+        staff_name = input_data.get('staff_name')
+        reminder_room = self.config.get('reminder_room_id') or input_data.get('reminder_room_id')
+        draft_id = draft.get('draft_id') or 'unknown_draft'
+
+        customextra = {
+            'reminder_content': 'draft_send',
+            'org_id': org_id,
+            'customer_id': customer_id,
+            'task_id': task_id,
+            'customer_name': customer_name,
+            'language': language,
+            'recipient_address': recipient_address,
+            'recipient_name': recipient_name,
+            'staff_name': staff_name,
+            'team_id': team_id,
+            'team_name': team_name,
+            'interaction_type': input_data.get('interaction_type'),
+            'draft_id': draft_id,
+            'import_uuid': f"{org_id}_{customer_id}_{task_id}_{draft_id}"
+        }
+
+        if draft.get('product_name'):
+            customextra['product_name'] = draft.get('product_name')
+        if draft.get('approach'):
+            customextra['approach'] = draft.get('approach')
+        if draft.get('mail_tone'):
+            customextra['mail_tone'] = draft.get('mail_tone')
+
+        return {
+            'status': 'published',
+            'task': f"FuseSell initial outreach {org_id}_{customer_id} - {task_id}",
+            'tags': ['fusesell', 'init-outreach'],
+            'room_id': reminder_room,
+            'org_id': org_id,
+            'customer_id': customer_id,
+            'task_id': task_id,
+            'team_id': team_id,
+            'team_name': team_name,
+            'language': language,
+            'customer_name': customer_name,
+            'staff_name': staff_name,
+            'customextra': customextra
+        }
 
     def _handle_close(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """

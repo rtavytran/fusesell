@@ -881,6 +881,12 @@ Generate only the email content, no additional commentary:"""
             
             # Check if immediate sending is requested
             send_immediately = input_data.get('send_immediately', False)
+            reminder_context = self._build_follow_up_reminder_context(
+                draft,
+                recipient_address,
+                recipient_name,
+                context
+            )
             
             # Schedule the follow-up email event
             schedule_result = scheduler.schedule_email_event(
@@ -891,7 +897,8 @@ Generate only the email content, no additional commentary:"""
                 team_id=input_data.get('team_id'),
                 customer_timezone=input_data.get('customer_timezone'),
                 email_type='follow_up',
-                send_immediately=send_immediately
+                send_immediately=send_immediately,
+                reminder_context=reminder_context
             )
             
             if schedule_result['success']:
@@ -918,6 +925,75 @@ Generate only the email content, no additional commentary:"""
                 'message': f'Follow-up email scheduling failed: {str(e)}',
                 'error': str(e)
             } 
+
+    def _build_follow_up_reminder_context(
+        self,
+        draft: Dict[str, Any],
+        recipient_address: str,
+        recipient_name: str,
+        context: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Build reminder_task metadata for scheduled follow-up emails.
+        """
+        input_data = context.get('input_data', {})
+        org_id = input_data.get('org_id', 'default') or 'default'
+        customer_id = input_data.get('customer_id') or context.get('execution_id') or 'unknown'
+        task_id = context.get('execution_id') or input_data.get('task_id') or 'unknown_task'
+        team_id = input_data.get('team_id')
+        team_name = input_data.get('team_name')
+        language = input_data.get('language')
+        customer_name = input_data.get('customer_name')
+        staff_name = input_data.get('staff_name')
+        interaction_type = input_data.get('interaction_type', 'follow_up')
+        follow_up_iteration = input_data.get('current_follow_up_time') or 1
+        reminder_room = self.config.get('reminder_room_id') or input_data.get('reminder_room_id')
+        draft_id = draft.get('draft_id') or 'unknown_draft'
+        product_name = draft.get('product_name') or input_data.get('product_name')
+
+        customextra = {
+            'reminder_content': 'follow_up',
+            'org_id': org_id,
+            'customer_id': customer_id,
+            'task_id': task_id,
+            'customer_name': customer_name,
+            'language': language,
+            'recipient_address': recipient_address,
+            'recipient_name': recipient_name,
+            'staff_name': staff_name,
+            'team_id': team_id,
+            'team_name': team_name,
+            'interaction_type': interaction_type,
+            'action_status': 'scheduled',
+            'current_follow_up_time': follow_up_iteration,
+            'draft_id': draft_id,
+            'import_uuid': f"{org_id}_{customer_id}_{task_id}_{draft_id}"
+        }
+
+        if product_name:
+            customextra['product_name'] = product_name
+        if draft.get('approach'):
+            customextra['approach'] = draft.get('approach')
+        if draft.get('mail_tone'):
+            customextra['mail_tone'] = draft.get('mail_tone')
+        if draft.get('message_type'):
+            customextra['message_type'] = draft.get('message_type')
+
+        return {
+            'status': 'published',
+            'task': f"FuseSell follow-up {org_id}_{customer_id} - {task_id}",
+            'tags': ['fusesell', 'follow-up'],
+            'room_id': reminder_room,
+            'org_id': org_id,
+            'customer_id': customer_id,
+            'task_id': task_id,
+            'team_id': team_id,
+            'team_name': team_name,
+            'language': language,
+            'customer_name': customer_name,
+            'staff_name': staff_name,
+            'customextra': customextra
+        }
    # Data access methods (similar to initial outreach)
     def _get_customer_data(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """Get customer data from previous stages or input."""

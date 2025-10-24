@@ -7,7 +7,7 @@ import sqlite3
 import json
 import os
 import uuid
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Sequence, Union
 from datetime import datetime
 import logging
 from pathlib import Path
@@ -22,6 +22,31 @@ class LocalDataManager:
     # Class-level tracking to prevent multiple initializations
     _initialized_databases = set()
     _initialization_lock = False
+    _product_json_fields = [
+        'target_users',
+        'key_features',
+        'unique_selling_points',
+        'pain_points_solved',
+        'competitive_advantages',
+        'pricing',
+        'pricing_rules',
+        'sales_metrics',
+        'customer_feedback',
+        'keywords',
+        'related_products',
+        'seasonal_demand',
+        'market_insights',
+        'case_studies',
+        'testimonials',
+        'success_metrics',
+        'product_variants',
+        'technical_specifications',
+        'compatibility',
+        'support_info',
+        'regulatory_compliance',
+        'localization',
+        'shipping_info'
+    ]
 
     def __init__(self, data_dir: str = "./fusesell_data"):
         """
@@ -457,6 +482,28 @@ class LocalDataManager:
                     )
                 """)
 
+                # Create reminder_task table (equivalent to Directus reminder_task)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS reminder_task (
+                        id TEXT PRIMARY KEY,
+                        status TEXT NOT NULL,
+                        task TEXT NOT NULL,
+                        cron TEXT NOT NULL,
+                        room_id TEXT,
+                        tags TEXT,
+                        customextra TEXT,
+                        org_id TEXT,
+                        customer_id TEXT,
+                        task_id TEXT,
+                        import_uuid TEXT,
+                        scheduled_time TIMESTAMP,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        executed_at TIMESTAMP,
+                        error_message TEXT
+                    )
+                """)
+
                 # Create extracted_files table (equivalent to gs_plan_setting_extracted_file)
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS extracted_files (
@@ -566,6 +613,14 @@ class LocalDataManager:
                     "CREATE INDEX IF NOT EXISTS idx_prompts_org_id ON prompts(org_id)")
                 cursor.execute(
                     "CREATE INDEX IF NOT EXISTS idx_scheduler_rules_org_id ON scheduler_rules(org_id)")
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_reminder_task_status ON reminder_task(status)")
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_reminder_task_org_id ON reminder_task(org_id)")
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_reminder_task_task_id ON reminder_task(task_id)")
+                cursor.execute(
+                    "CREATE INDEX IF NOT EXISTS idx_reminder_task_cron ON reminder_task(cron)")
                 cursor.execute(
                     "CREATE INDEX IF NOT EXISTS idx_extracted_files_org_id ON extracted_files(org_id)")
                 cursor.execute(
@@ -1383,6 +1438,184 @@ class LocalDataManager:
             self.logger.error(f"Failed to get team settings: {str(e)}")
             raise
 
+    def build_team_settings_snapshot(
+        self,
+        team_id: str,
+        sections: Optional[Sequence[str]] = None
+    ) -> Dict[str, Any]:
+        """
+        Build a response payload containing team settings in the expected RealTimeX format.
+
+        Args:
+            team_id: Team identifier
+            sections: Optional sequence of section names to include. Accepts either
+                full keys (e.g. ``gs_team_product``) or shorthand without the prefix.
+
+        Returns:
+            Dictionary shaped as ``{"data": [{...}]}``. When no settings exist,
+            returns ``{"data": []}``.
+        """
+        settings = self.get_team_settings(team_id)
+        if not settings:
+            return {"data": []}
+
+        available_fields = [
+            'gs_team_organization',
+            'gs_team_rep',
+            'gs_team_product',
+            'gs_team_schedule_time',
+            'gs_team_initial_outreach',
+            'gs_team_follow_up',
+            'gs_team_auto_interaction',
+            'gs_team_followup_schedule_time',
+            'gs_team_birthday_email',
+        ]
+
+        if sections:
+            normalized = set()
+            for item in sections:
+                if not item:
+                    continue
+                item = item.strip()
+                if not item:
+                    continue
+                if item.startswith("gs_team_"):
+                    normalized.add(item)
+                else:
+                    normalized.add(f"gs_team_{item}")
+            fields_to_include = [field for field in available_fields if field in normalized]
+        else:
+            fields_to_include = available_fields
+
+        list_like_fields = {
+            'gs_team_organization',
+            'gs_team_rep',
+            'gs_team_product',
+            'gs_team_auto_interaction',
+        }
+        list_field_defaults = {
+            'gs_team_organization': {
+                'org_name': None,
+                'address': None,
+                'website': None,
+                'industry': None,
+                'description': None,
+                'logo': None,
+                'primary_email': None,
+                'primary_phone': None,
+                'primary_color': None,
+                'is_active': False,
+                'avg_rating': None,
+                'total_sales': None,
+                'total_products': None,
+                'date_joined': None,
+                'last_active': None,
+                'social_media_links': [],
+            },
+            'gs_team_rep': {
+                'name': None,
+                'email': None,
+                'phone': None,
+                'position': None,
+                'website': None,
+                'logo': None,
+                'username': None,
+                'is_primary': False,
+                'primary_color': None,
+                'primary_phone': None,
+            },
+            'gs_team_product': {
+                'product_id': None,
+                'product_name': None,
+                'image_url': None,
+                'enabled': True,
+                'priority': None,
+            },
+            'gs_team_auto_interaction': {
+                'from_email': '',
+                'from_name': '',
+                'from_number': '',
+                'tool_type': 'Email',
+                'email_cc': '',
+                'email_bcc': '',
+            },
+        }
+        alias_fields = {
+            'gs_team_organization': {
+                'name': 'org_name',
+                'brand_palette': 'primary_color',
+            },
+        }
+
+        snapshot: Dict[str, Any] = {}
+        for field in fields_to_include:
+            value = settings.get(field)
+            if value is None:
+                continue
+
+            if field in list_like_fields:
+                if isinstance(value, list):
+                    normalized_items = []
+                    defaults = list_field_defaults.get(field, {})
+                    aliases = alias_fields.get(field, {})
+                    for item in value:
+                        if not isinstance(item, dict):
+                            continue
+                        normalized = {}
+                        for key, default_val in defaults.items():
+                            if key == 'social_media_links':
+                                current = item.get(key)
+                                normalized[key] = current if isinstance(current, list) else []
+                            else:
+                                normalized[key] = item.get(key, default_val)
+                        for legacy_key, target_key in aliases.items():
+                            if normalized.get(target_key) in (None, '', []):
+                                if legacy_key in item:
+                                    normalized[target_key] = item[legacy_key]
+                        # include any additional keys that might exist
+                        normalized_items.append(normalized)
+                    snapshot[field] = normalized_items
+                elif value:
+                    defaults = list_field_defaults.get(field, {})
+                    aliases = alias_fields.get(field, {})
+                    normalized = {key: value.get(key, default_val) for key, default_val in defaults.items()}
+                    for legacy_key, target_key in aliases.items():
+                        if normalized.get(target_key) in (None, '', []):
+                            if legacy_key in value:
+                                normalized[target_key] = value[legacy_key]
+                    snapshot[field] = [normalized]
+                else:
+                    snapshot[field] = []
+            else:
+                snapshot[field] = value
+
+        if not snapshot:
+            return {"data": []}
+
+        return {"data": [snapshot]}
+
+    def _deserialize_product_row(self, row: sqlite3.Row) -> Dict[str, Any]:
+        """
+        Convert a product row into a dictionary with JSON fields parsed.
+
+        Args:
+            row: SQLite row containing product data
+
+        Returns:
+            Dictionary representation of the row with JSON fields decoded
+        """
+        product = dict(row)
+
+        for field in self._product_json_fields:
+            value = product.get(field)
+            if value:
+                try:
+                    product[field] = json.loads(value)
+                except (json.JSONDecodeError, TypeError):
+                    product[field] = None
+
+        return product
+
     def save_product(self, product_data: Dict[str, Any]) -> str:
         """
         Save or update product information.
@@ -1569,50 +1802,119 @@ class LocalDataManager:
             self.logger.error(f"Failed to save product: {str(e)}")
             raise
 
-    def get_products_by_org(self, org_id: str) -> List[Dict[str, Any]]:
+    def search_products(
+        self,
+        org_id: str,
+        status: Optional[str] = "active",
+        search_term: Optional[str] = None,
+        limit: Optional[int] = None,
+        sort: Optional[str] = "name"
+    ) -> List[Dict[str, Any]]:
         """
-        Get all products for an organization.
+        Search products for an organization with optional filters.
 
         Args:
             org_id: Organization identifier
+            status: Product status filter ("active", "inactive", or "all")
+            search_term: Keyword to match against name, descriptions, or keywords
+            limit: Maximum number of products to return
+            sort: Sort order ("name", "created_at", "updated_at")
 
         Returns:
             List of product dictionaries
         """
         try:
+            def _is_placeholder(value: Any) -> bool:
+                return isinstance(value, str) and value.strip().startswith("{{") and value.strip().endswith("}}")
+
+            # Normalize status
+            normalized_status: Optional[str] = status
+            if _is_placeholder(normalized_status):
+                normalized_status = None
+            if isinstance(normalized_status, str):
+                normalized_status = normalized_status.strip().lower()
+            if normalized_status not in {'active', 'inactive', 'all'}:
+                normalized_status = 'active'
+
+            # Normalize sort
+            normalized_sort: Optional[str] = sort
+            if _is_placeholder(normalized_sort):
+                normalized_sort = None
+            if isinstance(normalized_sort, str):
+                normalized_sort = normalized_sort.strip().lower()
+            sort_map = {
+                'name': ("product_name COLLATE NOCASE", "ASC"),
+                'created_at': ("datetime(created_at)", "DESC"),
+                'updated_at': ("datetime(updated_at)", "DESC"),
+            }
+            order_by, direction = sort_map.get(normalized_sort, sort_map['name'])
+
+            # Normalize search term
+            normalized_search: Optional[str] = None
+            if not _is_placeholder(search_term) and search_term is not None:
+                normalized_search = str(search_term).strip()
+            if normalized_search == "":
+                normalized_search = None
+
+            # Normalize limit
+            normalized_limit: Optional[int] = None
+            if not _is_placeholder(limit) and limit is not None:
+                try:
+                    normalized_limit = int(limit)
+                    if normalized_limit <= 0:
+                        normalized_limit = None
+                except (TypeError, ValueError):
+                    normalized_limit = None
+
+            where_clauses = ["org_id = ?"]
+            params: List[Any] = [org_id]
+
+            if normalized_status != 'all':
+                where_clauses.append("status = ?")
+                params.append(normalized_status)
+
+            query = "SELECT * FROM products WHERE " + " AND ".join(where_clauses)
+
+            if normalized_search:
+                like_value = f"%{normalized_search.lower()}%"
+                query += (
+                    " AND ("
+                    "LOWER(product_name) LIKE ? OR "
+                    "LOWER(COALESCE(short_description, '')) LIKE ? OR "
+                    "LOWER(COALESCE(long_description, '')) LIKE ? OR "
+                    "LOWER(COALESCE(keywords, '')) LIKE ?)"
+                )
+                params.extend([like_value] * 4)
+
+            query += f" ORDER BY {order_by} {direction}"
+
+            if normalized_limit is not None:
+                query += " LIMIT ?"
+                params.append(normalized_limit)
+
             with sqlite3.connect(self.db_path) as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT * FROM products WHERE org_id = ? AND status = 'active'", (org_id,))
+                cursor.execute(query, params)
+                rows = cursor.fetchall()
 
-                products = []
-                for row in cursor.fetchall():
-                    product = dict(row)
-                    # Parse JSON fields
-                    json_fields = [
-                        'target_users', 'key_features', 'unique_selling_points', 'pain_points_solved',
-                        'competitive_advantages', 'pricing', 'pricing_rules', 'sales_metrics',
-                        'customer_feedback', 'keywords', 'related_products', 'seasonal_demand',
-                        'market_insights', 'case_studies', 'testimonials', 'success_metrics',
-                        'product_variants', 'technical_specifications', 'compatibility', 'support_info',
-                        'regulatory_compliance', 'localization', 'shipping_info'
-                    ]
-
-                    for field in json_fields:
-                        if product[field]:
-                            try:
-                                product[field] = json.loads(product[field])
-                            except json.JSONDecodeError:
-                                product[field] = None
-
-                    products.append(product)
-
-                return products
+            return [self._deserialize_product_row(row) for row in rows]
 
         except Exception as e:
-            self.logger.error(f"Failed to get products: {str(e)}")
+            self.logger.error(f"Failed to search products: {str(e)}")
             raise
+
+    def get_products_by_org(self, org_id: str) -> List[Dict[str, Any]]:
+        """
+        Backward-compatible helper that returns active products for an organization.
+
+        Args:
+            org_id: Organization identifier
+
+        Returns:
+            List of active product dictionaries
+        """
+        return self.search_products(org_id=org_id, status="active")
 
     def get_products_by_team(self, team_id: str) -> List[Dict[str, Any]]:
         """
@@ -1649,29 +1951,8 @@ class LocalDataManager:
                 cursor.execute(
                     f"SELECT * FROM products WHERE product_id IN ({placeholders}) AND status = 'active'", product_ids)
 
-                products = []
-                for row in cursor.fetchall():
-                    product = dict(row)
-                    # Parse JSON fields (same as get_products_by_org)
-                    json_fields = [
-                        'target_users', 'key_features', 'unique_selling_points', 'pain_points_solved',
-                        'competitive_advantages', 'pricing', 'pricing_rules', 'sales_metrics',
-                        'customer_feedback', 'keywords', 'related_products', 'seasonal_demand',
-                        'market_insights', 'case_studies', 'testimonials', 'success_metrics',
-                        'product_variants', 'technical_specifications', 'compatibility', 'support_info',
-                        'regulatory_compliance', 'localization', 'shipping_info'
-                    ]
-
-                    for field in json_fields:
-                        if product[field]:
-                            try:
-                                product[field] = json.loads(product[field])
-                            except json.JSONDecodeError:
-                                product[field] = None
-
-                    products.append(product)
-
-                return products
+                return [self._deserialize_product_row(row)
+                        for row in cursor.fetchall()]
 
         except Exception as e:
             self.logger.error(f"Failed to get products by team: {str(e)}")
@@ -1695,25 +1976,7 @@ class LocalDataManager:
                 row = cursor.fetchone()
 
                 if row:
-                    product = dict(row)
-                    # Parse JSON fields
-                    json_fields = [
-                        'target_users', 'key_features', 'unique_selling_points', 'pain_points_solved',
-                        'competitive_advantages', 'pricing', 'pricing_rules', 'sales_metrics',
-                        'customer_feedback', 'keywords', 'related_products', 'seasonal_demand',
-                        'market_insights', 'case_studies', 'testimonials', 'success_metrics',
-                        'product_variants', 'technical_specifications', 'compatibility', 'support_info',
-                        'regulatory_compliance', 'localization', 'shipping_info'
-                    ]
-
-                    for field in json_fields:
-                        if product[field]:
-                            try:
-                                product[field] = json.loads(product[field])
-                            except json.JSONDecodeError:
-                                product[field] = None
-
-                    return product
+                    return self._deserialize_product_row(row)
                 return None
 
         except Exception as e:

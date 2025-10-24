@@ -2,6 +2,26 @@
 
 All notable changes to FuseSell Local will be documented in this file.
 
+# [1.2.5] - 2025-10-24
+
+### Added
+- Local `reminder_task` table and scheduler plumbing so scheduled outreach mirrors the server flow and can be consumed by RealTimeX orchestration.
+- Initial outreach and follow-up stages now emit reminder metadata whenever emails are scheduled, including team/customer context.
+
+### Changed
+- Event scheduler returns reminder IDs alongside scheduled events while preserving immutable default prompts when layering team overrides.
+
+# [1.2.3] - 2025-10-21
+
+### Added
+- `LocalDataManager.search_products()` for server-compatible product filtering (status, keyword, limit, sort).
+- CLI `product list` flags and `list_products.py` filters wired to the new search helper.
+- Regression tests covering keyword search, sorting, and limiting behavior.
+
+### Changed
+- `get_products_by_org` now delegates to the filtered search path to avoid loading inactive results.
+- Product management documentation updated for RealTimeX flows and CLI filter usage.
+
 # [1.2.2] - 2025-10-21
 
 ### Added

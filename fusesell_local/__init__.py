@@ -32,6 +32,6 @@ __all__ = [
     "validate_config",
 ]
 
-__version__ = "1.2.2"
+__version__ = "1.2.5"
 __author__ = "FuseSell Team"
 __description__ = "Local implementation of FuseSell AI sales automation pipeline"
