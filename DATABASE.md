@@ -431,6 +431,7 @@ CREATE TABLE teams (
     total_settings INTEGER DEFAULT 0,      -- Total number of settings
     completed_settings_list TEXT,          -- Completed settings as JSON
     missing_settings_list TEXT,            -- Missing settings as JSON
+    status TEXT DEFAULT 'active',          -- Team status
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

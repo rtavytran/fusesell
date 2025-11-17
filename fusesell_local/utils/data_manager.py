@@ -273,6 +273,7 @@ class LocalDataManager:
                         total_settings INTEGER DEFAULT 0,
                         completed_settings_list TEXT,
                         missing_settings_list TEXT,
+                        status TEXT DEFAULT 'active',
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                     )
@@ -361,6 +362,21 @@ class LocalDataManager:
                         self.logger.info("Team settings table migration completed")
                 except Exception as e:
                     self.logger.debug(f"Migration check/execution failed (may be normal): {str(e)}")
+
+                # Ensure teams table has status column for enabling/disabling teams
+                try:
+                    cursor.execute("PRAGMA table_info(teams)")
+                    team_columns = [row[1] for row in cursor.fetchall()]
+
+                    if "status" not in team_columns:
+                        self.logger.info("Adding status column to teams table")
+                        cursor.execute(
+                            "ALTER TABLE teams ADD COLUMN status TEXT DEFAULT 'active'"
+                        )
+                except Exception as e:
+                    self.logger.debug(
+                        f"Teams status column migration skipped/failed (may be normal): {str(e)}"
+                    )
 
                 # Create products table (equivalent to sell_products)
                 cursor.execute("""
