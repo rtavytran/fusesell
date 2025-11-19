@@ -16,6 +16,7 @@ from typing import Any, Callable, Dict, Mapping, MutableMapping, Optional, Seque
 from .pipeline import FuseSellPipeline
 from .utils.logger import setup_logging as _setup_logging
 from .utils.validators import InputValidator
+from .utils.llm_client import normalize_llm_base_url
 
 
 class ConfigValidationError(ValueError):
@@ -137,6 +138,8 @@ def build_config(options: OptionsType) -> Dict[str, Any]:
         "verbose": _coerce_bool(_get("verbose")),
         "dry_run": _coerce_bool(_get("dry_run")),
     }
+
+    config["llm_base_url"] = normalize_llm_base_url(config.get("llm_base_url"))
 
     return config
 
@@ -338,4 +341,3 @@ def execute_pipeline(
         }
 
     return run_pipeline(config)
-

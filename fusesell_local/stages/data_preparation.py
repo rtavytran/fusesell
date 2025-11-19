@@ -85,12 +85,19 @@ class DataPreparationStage(BaseStage):
             'company_website': input_data.get('customer_website', ''),
             'customer_description': input_data.get('customer_description', ''),
             'company_mini_search': input_data.get('company_mini_search', ''),
-            'contact_name': input_data.get('contact_name', ''),
-            'customer_email': input_data.get('contact_email', ''),
-            'customer_phone': input_data.get('contact_phone', ''),
+            'contact_name': input_data.get('contact_name')
+                or input_data.get('recipient_name')
+                or input_data.get('customer_name', ''),
+            'customer_email': input_data.get('contact_email')
+                or input_data.get('recipient_address')
+                or input_data.get('customer_email', ''),
+            'customer_phone': input_data.get('contact_phone')
+                or input_data.get('customer_phone', ''),
             'customer_address': input_data.get('customer_address', ''),
-            'customer_linkedin': input_data.get('linkedin_url', ''),
-            'customer_facebook': input_data.get('facebook_url', ''),
+            'customer_linkedin': input_data.get('linkedin_url')
+                or input_data.get('input_linkedin_url', ''),
+            'customer_facebook': input_data.get('facebook_url')
+                or input_data.get('input_facebook_url', ''),
             'company_business': '',
             'company_industries': [],
             'founders': [],

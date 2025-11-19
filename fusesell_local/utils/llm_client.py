@@ -13,6 +13,63 @@ from typing import Dict, Any, List, Optional
 import logging
 import time
 import json
+from urllib.parse import urlsplit, urlunsplit
+
+
+def normalize_llm_base_url(base_url: Optional[str], provider: Optional[str] = None) -> Optional[str]:
+    """
+    Ensure LLM base URLs point to the OpenAI-compatible /v1 endpoint unless they already target
+    Azure deployment paths that do not expect the suffix.
+
+    Args:
+        base_url: User-provided base URL.
+        provider: Optional provider hint (e.g., 'azure-openai').
+
+    Returns:
+        Normalized base URL with `/v1` appended when needed, or ``None`` if input is empty.
+    """
+    if not base_url:
+        return None
+
+    normalized = base_url.strip()
+    if not normalized:
+        return None
+
+    provider_hint = (provider or "").lower()
+    if provider_hint.startswith("azure") or "openai.azure.com" in normalized.lower():
+        return normalized.rstrip("/")
+
+    try:
+        parsed = urlsplit(normalized)
+    except ValueError:
+        parsed = None
+
+    if parsed and parsed.scheme and parsed.netloc:
+        path = parsed.path.rstrip("/")
+        segments = [segment for segment in path.split("/") if segment]
+
+        if not segments:
+            new_path = "/v1"
+        elif segments[-1] in {"v1", "v1beta"} or "v1" in segments or "deployments" in segments:
+            new_path = "/" + "/".join(segments)
+        else:
+            new_path = f"{path}/v1" if path else "/v1"
+
+        rebuilt = urlunsplit(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                new_path,
+                parsed.query,
+                parsed.fragment,
+            )
+        )
+        return rebuilt.rstrip("/")
+
+    stripped = normalized.rstrip("/")
+    if stripped.endswith("/v1") or "/v1/" in stripped:
+        return stripped
+    return f"{stripped}/v1"
 
 
 class LLMClient:
@@ -37,9 +94,11 @@ class LLMClient:
         self.model = model
         self.logger = logging.getLogger("fusesell.llm_client")
         
+        normalized_base_url = normalize_llm_base_url(base_url)
+        
         # Initialize OpenAI client
-        if base_url:
-            self.client = openai.OpenAI(api_key=api_key, base_url=base_url)
+        if normalized_base_url:
+            self.client = openai.OpenAI(api_key=api_key, base_url=normalized_base_url)
         else:
             self.client = openai.OpenAI(api_key=api_key)
     

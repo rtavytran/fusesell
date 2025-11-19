@@ -33,6 +33,23 @@ def test_build_config_generates_defaults():
     assert config["send_immediately"] is False
 
 
+def test_build_config_normalizes_llm_base_url():
+    config = build_config(
+        base_options(
+            llm_base_url="https://custom-llm.example.com",
+        )
+    )
+
+    assert config["llm_base_url"] == "https://custom-llm.example.com/v1"
+
+
+def test_build_config_preserves_azure_base_url():
+    azure_url = "https://rtx-openai.openai.azure.com/openai/deployments/gpt4"
+    config = build_config(base_options(llm_base_url=azure_url))
+
+    assert config["llm_base_url"] == azure_url
+
+
 def test_validate_config_detects_missing_sources():
     config = build_config(
         base_options(

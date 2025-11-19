@@ -4,7 +4,7 @@ Creates scheduled events in database for external app to handle
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Any, Optional, List, Union
 import pytz
 import json
@@ -84,6 +84,7 @@ class EventScheduler:
                     status TEXT NOT NULL,
                     task TEXT NOT NULL,
                     cron TEXT NOT NULL,
+                    cron_ts INTEGER,
                     room_id TEXT,
                     tags TEXT,
                     customextra TEXT,
@@ -115,6 +116,11 @@ class EventScheduler:
                 CREATE INDEX IF NOT EXISTS idx_reminder_task_cron 
                 ON reminder_task(cron)
             """)
+
+            cursor.execute("PRAGMA table_info(reminder_task)")
+            columns = {row[1] for row in cursor.fetchall()}
+            if 'cron_ts' not in columns:
+                cursor.execute("ALTER TABLE reminder_task ADD COLUMN cron_ts INTEGER")
             
             conn.commit()
             conn.close()
@@ -177,19 +183,32 @@ class EventScheduler:
             ISO 8601 formatted string.
         """
         if isinstance(value, datetime):
-            return value.isoformat()
+            return value.replace(second=0, microsecond=0).isoformat()
         if value is None:
-            return datetime.utcnow().isoformat()
+            return datetime.utcnow().replace(second=0, microsecond=0).isoformat()
 
         value_str = str(value).strip()
         if not value_str:
-            return datetime.utcnow().isoformat()
+            return datetime.utcnow().replace(second=0, microsecond=0).isoformat()
 
         try:
             parsed = datetime.fromisoformat(value_str)
-            return parsed.isoformat()
+            return parsed.replace(second=0, microsecond=0).isoformat()
         except ValueError:
             return value_str
+
+    def _to_unix_timestamp(self, value: Union[str, datetime, None]) -> Optional[int]:
+        """
+        Convert a datetime-like value to a Unix timestamp (seconds).
+        """
+        iso_value = self._format_datetime(value)
+        try:
+            parsed = datetime.fromisoformat(iso_value)
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return int(parsed.timestamp())
 
     def _build_reminder_payload(
         self,
@@ -264,7 +283,7 @@ class EventScheduler:
         customextra.setdefault('recipient_name', recipient_name)
         customextra.setdefault('draft_id', draft_id)
         customextra.setdefault('customer_timezone', customer_timezone)
-        customextra.setdefault('scheduled_time_utc', send_time.isoformat())
+        customextra.setdefault('scheduled_time_utc', self._format_datetime(send_time))
 
         if team_id and 'team_id' not in customextra:
             customextra['team_id'] = team_id
@@ -296,11 +315,13 @@ class EventScheduler:
 
         cron_value = self._format_datetime(cron_value or send_time)
         scheduled_time_str = self._format_datetime(scheduled_time_value or send_time)
+        cron_ts = self._to_unix_timestamp(cron_value)
 
         return {
             'status': status,
             'task': task_label,
             'cron': cron_value,
+            'cron_ts': cron_ts,
             'room_id': room_id,
             'tags': tags,
             'customextra': customextra,
@@ -346,15 +367,20 @@ class EventScheduler:
             conn = sqlite3.connect(self.main_db_path)
             cursor = conn.cursor()
 
+            cron_ts = payload.get('cron_ts')
+            if cron_ts is None:
+                cron_ts = self._to_unix_timestamp(payload.get('cron'))
+
             cursor.execute("""
                 INSERT INTO reminder_task
-                (id, status, task, cron, room_id, tags, customextra, org_id, customer_id, task_id, import_uuid, scheduled_time)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                (id, status, task, cron, cron_ts, room_id, tags, customextra, org_id, customer_id, task_id, import_uuid, scheduled_time)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 reminder_id,
                 payload.get('status', 'published'),
                 payload.get('task') or 'FuseSell Reminder',
                 self._format_datetime(payload.get('cron')),
+                cron_ts,
                 payload.get('room_id'),
                 tags_str,
                 customextra_str,
@@ -455,6 +481,7 @@ class EventScheduler:
                     draft_id=draft_id,
                     customer_timezone=customer_timezone
                 )
+                reminder_payload.setdefault('cron_ts', self._to_unix_timestamp(reminder_payload.get('cron')))
                 reminder_task_id = self._insert_reminder_task(reminder_payload)
 
             # Log the scheduling
@@ -585,6 +612,7 @@ class EventScheduler:
                     draft_id=original_draft_id,
                     customer_timezone=event_data['customer_timezone']
                 )
+                reminder_payload.setdefault('cron_ts', self._to_unix_timestamp(reminder_payload.get('cron')))
                 reminder_task_id = self._insert_reminder_task(reminder_payload)
             
             self.logger.info(f"Scheduled follow-up event {followup_event_id} for {follow_up_time}")

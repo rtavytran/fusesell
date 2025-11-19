@@ -2,6 +2,86 @@
 
 All notable changes to FuseSell Local will be documented in this file.
 
+# [1.3.3] - 2025-10-25
+
+### Changed
+- Added a shared `normalize_llm_base_url` helper so every entry point (CLI, programmatic API, birthday scheduler, etc.) consistently appends `/v1` to OpenAI-style endpoints while leaving Azure deployment URLs untouched.
+- Exported the helper for downstream consumers, enabling RealTimeX flows to import the canonical logic instead of maintaining their own copy.
+
+### Fixed
+- Resolved repeated `APIConnectionError` retries when custom LLM base URLs were missing `/v1`, restoring successful chat completion calls across all pipeline stages.
+- Added regression coverage to ensure Azure endpoints remain unchanged while standard endpoints are normalized, guarding against future regressions.
+
+# [1.3.2] - 2025-10-24
+
+### Changed
+- Removed the deterministic fallback template so every initial-outreach draft now originates from the LLM path; when the model call fails the stage reports an error instead of emitting canned copy.
+
+### Fixed
+- Normalized draft persistence so only HTML content is stored; duplicate plain-text rows are no longer generated when the prompt pipeline encounters failures.
+
+# [1.3.1] - 2025-10-24
+
+### Changed
+- Fallback draft generation now produces approach-specific HTML emails, ensuring usable output even when the LLM call fails.
+- Deterministic template emails and mock drafts reuse the resolved recipient data and signatures so every record stays HTML-compliant.
+
+### Fixed
+- Normalized draft creation to wrap plain-text results in <html><body> and removed duplicate drafts that previously occurred when the template path was used.
+
+# [1.3.0] - 2025-10-24
+
+### Added
+- Bundled prompt seeding now copies packaged defaults into fusesell_data/config automatically, guaranteeing the initial outreach stage always finds the shipped templates on first run.
+
+### Changed
+- Updated the default initial-outreach and follow-up prompts to require fully wrapped <html><body> content, enforce first-name greetings, and eliminate placeholder signatures so LLM drafts arrive production-ready.
+- Sanitization logic normalizes generated emails into HTML (including fallback/mock drafts), injects recipient metadata, and reuses the calculated first name across prompt, rewrite, and reminder flows.
+- Reminder scheduling now records Unix timestamps (cron_ts) for every new entry, simplifying downstream polling in RealTimeX orchestration.
+
+### Fixed
+- Draft generation once again prioritises the LLM prompt path; fallback templates only trigger when the prompt fails to load, preventing duplicate plain-text emails.
+- Rewrites, dry-run mocks, and fallback drafts no longer emit duplicate greetings or unresolved [Your ...] placeholders, and they retain HTML formatting for downstream mailers.
+
+# [1.2.9] - 2025-10-24
+
+### Changed
+- Primary sales rep metadata from gs_team_rep now flows into draft prompts, reminders, and signatures so outreach reflects the configured sender.
+- Reminder scheduling stores the Unix timestamp (cron_ts) alongside the ISO string for easier downstream filtering.
+- Greeting sanitizer standardises the first paragraph and removes duplicate salutations while keeping HTML formatting intact.
+
+### Fixed
+- Removed [Your ...] placeholder leftovers inside LLM responses and ensured drafts remain valid HTML even when the model mixes plain text and bullet lists.
+- Reminder creation no longer fails when the data acquisition stage supplies the email address, and follow-up reminders inherit the same customer metadata.
+
+# [1.2.8] - 2025-10-24
+
+### Changed
+- Initial outreach resolves the primary sales rep from `gs_team_rep` and injects their identity into prompts, reminders, and draft metadata so outreach reflects real team settings.
+
+### Fixed
+- Sanitizes generated email bodies to replace or remove `[Your …]` placeholders, ensuring signatures contain actual values even when optional rep fields are missing.
+- Reminder scheduling now preserves merged contact emails so follow-up records always carry `customer_email` for downstream automations.
+
+# [1.2.7] - 2025-10-24
+
+### Changed
+- RealTimeX sales-process normalization now forwards `recipient_address`, `recipient_name`, and `customer_email` into the FuseSell pipeline so prompt generation and scheduling have complete context.
+- Default outreach prompt replacements enrich customer metadata with toolkit-derived contact details and enforce first-name greetings to match server quality.
+
+### Fixed
+- Initial outreach stage now records generated drafts in the pipeline summary, seeds reminder_task rows with toolkit credentials, and schedules follow-up events when `send_immediately` is false.
+- Prompt-based draft generation no longer skips scheduling due to missing email fields and guarantees outputs without unresolved placeholders.
+
+# [1.2.6] - 2025-10-24
+
+### Added
+- Automatically seed packaged prompt, scoring, and template JSON files into the writable `ffusesell_data/config` directory so fresh installs immediately pick up the default initial outreach draft prompt.
+- Draft generation now records the scheduled reminder metadata in stage output while mirroring the server’s `schedule_auto_run` behaviour locally.
+
+### Fixed
+- Bundled configuration files are used as a fallback when the data directory is missing overrides, preventing empty prompt loads that previously produced low-quality duplicate drafts.
+
 # [1.2.5] - 2025-10-24
 
 ### Added
@@ -127,7 +207,7 @@ fusesell-local/
     stages/                # Pipeline stages (base implementation)
     utils/                 # Utilities (data, LLM, validation, logging)
     config/                # Configuration management
- fusesell_data/             # Local data storage
+ ffusesell_data/             # Local data storage
      config/                # Configuration files
      drafts/                # Generated email drafts
      logs/                  # Execution logs

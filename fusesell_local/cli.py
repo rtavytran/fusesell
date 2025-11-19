@@ -415,6 +415,27 @@ Examples:
             'list', help='List products')
         list_parser.add_argument(
             '--org-id', required=True, help='Organization ID')
+        list_parser.add_argument(
+            '--status',
+            choices=['active', 'inactive', 'all'],
+            default='active',
+            help='Filter products by status (default: active)',
+        )
+        list_parser.add_argument(
+            '--search-term',
+            help='Keyword to match against product name or descriptions',
+        )
+        list_parser.add_argument(
+            '--limit',
+            type=int,
+            help='Maximum number of products to return',
+        )
+        list_parser.add_argument(
+            '--sort',
+            choices=['name', 'created_at', 'updated_at'],
+            default='name',
+            help='Sort order for results (default: name)',
+        )
 
     def _add_settings_arguments(self, parser: argparse.ArgumentParser) -> None:
         """Add settings management arguments."""
@@ -1030,7 +1051,13 @@ Examples:
                     return 1
 
             elif action == 'list':
-                products = data_manager.get_products_by_org(args.org_id)
+                products = data_manager.search_products(
+                    org_id=args.org_id,
+                    status=getattr(args, 'status', 'active'),
+                    search_term=getattr(args, 'search_term', None),
+                    limit=getattr(args, 'limit', None),
+                    sort=getattr(args, 'sort', 'name'),
+                )
                 if products:
                     print(f"Products for organization {args.org_id}:")
                     for product in products:

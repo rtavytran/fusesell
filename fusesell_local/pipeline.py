@@ -4,6 +4,7 @@ Manages the execution of all pipeline stages in sequence
 """
 
 from typing import Dict, Any, List, Optional
+import copy
 import time
 from datetime import datetime
 import uuid
@@ -252,10 +253,16 @@ class FuseSellPipeline:
                 self.logger.info("-" * 40)
                 self.logger.info("TIMING VALIDATION:")
                 if discrepancy_percentage < 5.0:
-                    self.logger.info(f"✅ Timing validation PASSED (discrepancy: {discrepancy_percentage:.1f}%)")
+                    self.logger.info(
+                        f"[OK] Timing validation PASSED (discrepancy: {discrepancy_percentage:.1f}%)"
+                    )
                 else:
-                    self.logger.warning(f"⚠️  Timing validation WARNING (discrepancy: {discrepancy_percentage:.1f}%)")
-                    self.logger.warning(f"   Expected ~{total_stage_time:.2f}s, got {total_duration:.2f}s")
+                    self.logger.warning(
+                        f"[WARN] Timing validation WARNING (discrepancy: {discrepancy_percentage:.1f}%)"
+                    )
+                    self.logger.warning(
+                        f"   Expected ~{total_stage_time:.2f}s, got {total_duration:.2f}s"
+                    )
             
             self.logger.info("=" * 60)
             
@@ -375,6 +382,7 @@ class FuseSellPipeline:
             'team_name': self.config.get('team_name'),
             'project_code': self.config.get('project_code'),
             'staff_name': self.config.get('staff_name', 'Sales Team'),
+            'customer_name': self.config.get('customer_name', ''),
             'language': self.config.get('language', 'english'),
             # Data sources (matching executor schema)
             'input_website': self.config.get('input_website', ''),
@@ -394,6 +402,7 @@ class FuseSellPipeline:
             'reason': self.config.get('reason', ''),
             'recipient_address': self.config.get('recipient_address', ''),
             'recipient_name': self.config.get('recipient_name', ''),
+            'customer_email': self.config.get('customer_email', ''),
             'interaction_type': self.config.get('interaction_type', 'email'),
             'human_action_id': self.config.get('human_action_id', ''),
 
@@ -550,9 +559,44 @@ class FuseSellPipeline:
         
         elif stage_name == 'initial_outreach':
             # Combine data from previous stages
+            customer_data = {}
             if 'data_preparation' in stage_results:
                 prep_data = stage_results['data_preparation'].get('data', {})
-                base_input['customer_data'] = prep_data
+                if isinstance(prep_data, dict):
+                    customer_data = copy.deepcopy(prep_data)
+            else:
+                existing_customer_data = base_input.get('customer_data', {})
+                if isinstance(existing_customer_data, dict):
+                    customer_data = copy.deepcopy(existing_customer_data)
+            
+            if not isinstance(customer_data, dict):
+                customer_data = {}
+            
+            primary_contact = dict(customer_data.get('primaryContact') or {})
+            input_email = (
+                base_input.get('recipient_address')
+                or base_input.get('customer_email')
+                or primary_contact.get('email')
+                or customer_data.get('contact_email')
+            )
+            if input_email:
+                primary_contact['email'] = input_email
+                customer_data['contact_email'] = input_email
+            
+            input_name = (
+                base_input.get('recipient_name')
+                or base_input.get('customer_name')
+                or primary_contact.get('name')
+                or customer_data.get('contact_name')
+            )
+            if input_name:
+                primary_contact['name'] = input_name
+                customer_data['contact_name'] = input_name
+            
+            if primary_contact:
+                customer_data['primaryContact'] = primary_contact
+            
+            base_input['customer_data'] = customer_data
             
             if 'lead_scoring' in stage_results:
                 scoring_data = stage_results['lead_scoring'].get('data', {})
@@ -599,9 +643,11 @@ class FuseSellPipeline:
                 elif stage_name == 'lead_scoring':
                     lead_scores = data.get('scores', [])
                 elif stage_name == 'initial_outreach':
-                    email_drafts.extend(data.get('drafts', []))
+                    drafts = data.get('drafts') or data.get('email_drafts') or []
+                    email_drafts.extend(drafts)
                 elif stage_name == 'follow_up':
-                    email_drafts.extend(data.get('drafts', []))
+                    drafts = data.get('drafts') or data.get('email_drafts') or []
+                    email_drafts.extend(drafts)
         
         # Generate performance analytics
         performance_analytics = self._generate_performance_analytics(duration)

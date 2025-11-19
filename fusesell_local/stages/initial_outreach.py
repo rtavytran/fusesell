@@ -18,6 +18,10 @@ class InitialOutreachStage(BaseStage):
     Supports: draft_write, draft_rewrite, send, close actions.
     """
     
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._active_rep_profile: Dict[str, Any] = {}
+    
     def execute(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
         Execute initial outreach stage with action-based routing (matching server executor).
@@ -99,23 +103,45 @@ class InitialOutreachStage(BaseStage):
         if not recommended_product:
             raise ValueError("No product recommendation available for email generation")
         
-        # Generate multiple email drafts
-        email_drafts = self._generate_email_drafts(customer_data, recommended_product, scoring_data, context)
+        rep_profile = self._resolve_primary_sales_rep(context)
+        self._active_rep_profile = rep_profile or {}
+
+        try:
+            # Generate multiple email drafts
+            email_drafts = self._generate_email_drafts(
+                customer_data,
+                recommended_product,
+                scoring_data,
+                context,
+                rep_profile=self._active_rep_profile
+            )
+        finally:
+            self._active_rep_profile = {}
         
         # Save drafts to local files and database
         saved_drafts = self._save_email_drafts(context, email_drafts)
+
+        schedule_summary = self._schedule_initial_reminder_for_drafts(
+            saved_drafts,
+            customer_data,
+            context
+        )
         
         # Prepare final output
         outreach_data = {
             'action': 'draft_write',
             'status': 'drafts_generated',
             'email_drafts': saved_drafts,
+            'drafts': saved_drafts,
             'recommended_product': recommended_product,
             'customer_summary': self._create_customer_summary(customer_data),
             'total_drafts_generated': len(saved_drafts),
             'generation_timestamp': datetime.now().isoformat(),
             'customer_id': context.get('execution_id')
         }
+
+        if schedule_summary:
+            outreach_data['reminder_schedule'] = schedule_summary
         
         # Save to database
         self.save_stage_result(context, outreach_data)
@@ -145,6 +171,12 @@ class InitialOutreachStage(BaseStage):
         # Get customer data for context
         customer_data = self._get_customer_data(context)
         scoring_data = self._get_scoring_data(context)
+
+        recipient_identity = self._resolve_recipient_identity(customer_data, context)
+        context.setdefault('_recipient_identity', recipient_identity)
+        context.setdefault('_recipient_identity', recipient_identity)
+        if recipient_identity.get('first_name') and not context.get('customer_first_name'):
+            context['customer_first_name'] = recipient_identity['first_name']
         
         # Rewrite the draft based on reason
         rewritten_draft = self._rewrite_draft(existing_draft, reason, customer_data, scoring_data, context)
@@ -318,8 +350,8 @@ class InitialOutreachStage(BaseStage):
         team_id = input_data.get('team_id')
         team_name = input_data.get('team_name')
         language = input_data.get('language')
-        customer_name = input_data.get('customer_name')
-        staff_name = input_data.get('staff_name')
+        customer_name = input_data.get('customer_name') or input_data.get('recipient_name')
+        staff_name = input_data.get('staff_name') or self.config.get('staff_name') or 'Sales Team'
         reminder_room = self.config.get('reminder_room_id') or input_data.get('reminder_room_id')
         draft_id = draft.get('draft_id') or 'unknown_draft'
 
@@ -346,6 +378,8 @@ class InitialOutreachStage(BaseStage):
             customextra['approach'] = draft.get('approach')
         if draft.get('mail_tone'):
             customextra['mail_tone'] = draft.get('mail_tone')
+        if recipient_address and 'customer_email' not in customextra:
+            customextra['customer_email'] = recipient_address
 
         return {
             'status': 'published',
@@ -359,9 +393,123 @@ class InitialOutreachStage(BaseStage):
             'team_name': team_name,
             'language': language,
             'customer_name': customer_name,
+            'customer_email': recipient_address,
             'staff_name': staff_name,
             'customextra': customextra
         }
+
+    def _schedule_initial_reminder_for_drafts(
+        self,
+        drafts: List[Dict[str, Any]],
+        customer_data: Dict[str, Any],
+        context: Dict[str, Any]
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Schedule reminder_task row for the highest-ranked draft after draft generation.
+
+        Mirrors the server-side behaviour where schedule_auto_run seeds reminder_task
+        so RealTimeX automations can pick up pending outreach immediately.
+        """
+        if not drafts:
+            return None
+
+        input_data = context.get('input_data', {})
+
+        if input_data.get('send_immediately'):
+            self.logger.debug("Skipping reminder scheduling because send_immediately is True")
+            return None
+
+        contact_info = customer_data.get('primaryContact', {}) or {}
+        stage_results = context.get('stage_results', {}) or {}
+        data_acquisition = {}
+        if isinstance(stage_results, dict):
+            data_acquisition = stage_results.get('data_acquisition', {}).get('data', {}) or {}
+
+        recipient_address = (
+            input_data.get('recipient_address')
+            or contact_info.get('email')
+            or contact_info.get('emailAddress')
+            or data_acquisition.get('customer_email')
+            or data_acquisition.get('contact_email')
+            or input_data.get('customer_email')
+        )
+        if not recipient_address:
+            self.logger.info("Skipping reminder scheduling: recipient email not available")
+            return None
+
+        recipient_name = (
+            input_data.get('recipient_name')
+            or contact_info.get('name')
+            or contact_info.get('fullName')
+            or data_acquisition.get('contact_name')
+            or data_acquisition.get('customer_name')
+            or ''
+        )
+
+        def _draft_sort_key(draft: Dict[str, Any]) -> tuple[int, float]:
+            priority = draft.get('priority_order')
+            if not isinstance(priority, int):
+                priority = 999
+            personalization = draft.get('personalization_score', 0)
+            try:
+                personalization_value = float(personalization)
+            except (TypeError, ValueError):
+                personalization_value = 0.0
+            return (priority, -personalization_value)
+
+        ordered_drafts = sorted(drafts, key=_draft_sort_key)
+        if not ordered_drafts:
+            return None
+
+        top_draft = ordered_drafts[0]
+
+        try:
+            from ..utils.event_scheduler import EventScheduler
+            scheduler = EventScheduler(self.config.get('data_dir', './fusesell_data'))
+        except Exception as exc:
+            self.logger.warning(
+                "Failed to initialise EventScheduler for reminder scheduling: %s",
+                exc
+            )
+            return {'success': False, 'error': str(exc)}
+
+        reminder_context = self._build_initial_reminder_context(
+            top_draft,
+            recipient_address,
+            recipient_name,
+            context
+        )
+
+        try:
+            schedule_result = scheduler.schedule_email_event(
+                draft_id=top_draft.get('draft_id'),
+                recipient_address=recipient_address,
+                recipient_name=recipient_name,
+                org_id=input_data.get('org_id') or self.config.get('org_id', 'default'),
+                team_id=input_data.get('team_id') or self.config.get('team_id'),
+                customer_timezone=input_data.get('customer_timezone'),
+                email_type='initial',
+                send_immediately=False,
+                reminder_context=reminder_context
+            )
+        except Exception as exc:
+            self.logger.error(f"Initial reminder scheduling failed: {exc}")
+            return {'success': False, 'error': str(exc)}
+
+        if schedule_result.get('success'):
+            self.logger.info(
+                "Scheduled initial outreach reminder %s for draft %s",
+                schedule_result.get('reminder_task_id'),
+                top_draft.get('draft_id')
+            )
+        else:
+            self.logger.warning(
+                "Reminder scheduling returned failure for draft %s: %s",
+                top_draft.get('draft_id'),
+                schedule_result.get('error')
+            )
+
+        return schedule_result
 
     def _handle_close(self, context: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -445,6 +593,65 @@ class InitialOutreachStage(BaseStage):
             self.logger.error(f"Failed to get recommended product: {str(e)}")
             return None
 
+    def _resolve_recipient_identity(
+        self,
+        customer_data: Dict[str, Any],
+        context: Dict[str, Any]
+    ) -> Dict[str, Optional[str]]:
+        """
+        Resolve recipient contact information and derive a safe first name.
+        """
+        input_data = context.get('input_data', {}) or {}
+        stage_results = context.get('stage_results', {}) or {}
+        data_acquisition: Dict[str, Any] = {}
+        if isinstance(stage_results, dict):
+            data_acquisition = stage_results.get('data_acquisition', {}).get('data', {}) or {}
+
+        primary_contact = dict(customer_data.get('primaryContact', {}) or {})
+
+        recipient_email = (
+            input_data.get('recipient_address')
+            or primary_contact.get('email')
+            or primary_contact.get('emailAddress')
+            or data_acquisition.get('contact_email')
+            or data_acquisition.get('customer_email')
+            or input_data.get('customer_email')
+        )
+
+        recipient_name = (
+            input_data.get('recipient_name')
+            or primary_contact.get('name')
+            or primary_contact.get('fullName')
+            or data_acquisition.get('contact_name')
+            or data_acquisition.get('customer_contact')
+            or input_data.get('customer_name')
+        )
+
+        first_name_source = (
+            context.get('customer_first_name')
+            or input_data.get('customer_first_name')
+            or recipient_name
+        )
+
+        first_name = ''
+        if isinstance(first_name_source, str) and first_name_source.strip():
+            first_name = self._extract_first_name(first_name_source.strip())
+        if not first_name and isinstance(recipient_name, str) and recipient_name.strip():
+            first_name = self._extract_first_name(recipient_name.strip())
+
+        if recipient_name and not primary_contact.get('name'):
+            primary_contact['name'] = recipient_name
+        if recipient_email and not primary_contact.get('email'):
+            primary_contact['email'] = recipient_email
+        if primary_contact and isinstance(customer_data, dict):
+            customer_data['primaryContact'] = primary_contact
+
+        return {
+            'email': recipient_email,
+            'full_name': recipient_name,
+            'first_name': first_name
+        }
+
     def _get_auto_interaction_config(self, team_id: str = None) -> Dict[str, Any]:
         """
         Get auto interaction configuration from team settings.
@@ -498,114 +705,124 @@ class InitialOutreachStage(BaseStage):
             self.logger.error(f"Failed to get auto interaction config for team {team_id}: {str(e)}")
             return default_config
 
-    def _generate_email_drafts(self, customer_data: Dict[str, Any], recommended_product: Dict[str, Any], scoring_data: Dict[str, Any], context: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _generate_email_drafts(self, customer_data: Dict[str, Any], recommended_product: Dict[str, Any], scoring_data: Dict[str, Any], context: Dict[str, Any], rep_profile: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
         """Generate multiple personalized email drafts using LLM."""
         if self.is_dry_run():
             return self._get_mock_email_drafts(customer_data, recommended_product, context)
         
-        try:
-            input_data = context.get('input_data', {})
-            company_info = customer_data.get('companyInfo', {})
-            contact_info = customer_data.get('primaryContact', {})
-            pain_points = customer_data.get('painPoints', [])
+        input_data = context.get('input_data', {}) or {}
+        rep_profile = rep_profile or {}
+        recipient_identity = self._resolve_recipient_identity(customer_data, context)
+        if recipient_identity.get('first_name') and not context.get('customer_first_name'):
+            context['customer_first_name'] = recipient_identity['first_name']
+        context.setdefault('_recipient_identity', recipient_identity)
+        if rep_profile:
+            primary_name = rep_profile.get('name')
+            if primary_name:
+                input_data['staff_name'] = primary_name
+                self.config['staff_name'] = primary_name
+            if rep_profile.get('email'):
+                input_data.setdefault('staff_email', rep_profile.get('email'))
+            if rep_profile.get('phone') or rep_profile.get('primary_phone'):
+                input_data.setdefault('staff_phone', rep_profile.get('phone') or rep_profile.get('primary_phone'))
+            if rep_profile.get('position'):
+                input_data.setdefault('staff_title', rep_profile.get('position'))
+            if rep_profile.get('website'):
+                input_data.setdefault('staff_website', rep_profile.get('website'))
 
-            prompt_drafts = self._generate_email_drafts_from_prompt(
+        company_info = customer_data.get('companyInfo', {}) or {}
+        contact_info = customer_data.get('primaryContact', {}) or {}
+        pain_points = customer_data.get('painPoints', [])
+
+        prompt_drafts = self._generate_email_drafts_from_prompt(
+            customer_data,
+            recommended_product,
+            scoring_data,
+            context
+        )
+        if prompt_drafts:
+            return prompt_drafts
+
+        draft_approaches = [
+            {
+                'name': 'professional_direct',
+                'tone': 'professional and direct',
+                'focus': 'business value and ROI',
+                'length': 'concise'
+            },
+            {
+                'name': 'consultative',
+                'tone': 'consultative and helpful',
+                'focus': 'solving specific pain points',
+                'length': 'medium'
+            },
+            {
+                'name': 'industry_expert',
+                'tone': 'industry expert and insightful',
+                'focus': 'industry trends and challenges',
+                'length': 'detailed'
+            },
+            {
+                'name': 'relationship_building',
+                'tone': 'warm and relationship-focused',
+                'focus': 'building connection and trust',
+                'length': 'personal'
+            }
+        ]
+
+        generated_drafts: List[Dict[str, Any]] = []
+
+        for approach in draft_approaches:
+            email_body = self._generate_single_email_draft(
                 customer_data,
                 recommended_product,
                 scoring_data,
+                approach,
                 context
             )
-            if prompt_drafts:
-                return prompt_drafts
 
-            # Generate multiple draft variations with different approaches
-            draft_approaches = [
-                {
-                    'name': 'professional_direct',
-                    'tone': 'professional and direct',
-                    'focus': 'business value and ROI',
-                    'length': 'concise'
-                },
-                {
-                    'name': 'consultative',
-                    'tone': 'consultative and helpful',
-                    'focus': 'solving specific pain points',
-                    'length': 'medium'
-                },
-                {
-                    'name': 'industry_expert',
-                    'tone': 'industry expert and insightful',
-                    'focus': 'industry trends and challenges',
-                    'length': 'detailed'
-                },
-                {
-                    'name': 'relationship_building',
-                    'tone': 'warm and relationship-focused',
-                    'focus': 'building connection and trust',
-                    'length': 'personal'
+            subject_lines = self._generate_subject_lines(
+                customer_data, recommended_product, approach, context
+            )
+
+            draft_id = f"uuid:{str(uuid.uuid4())}"
+            selected_subject = subject_lines[0] if subject_lines else f"Partnership opportunity for {company_info.get('name', 'your company')}"
+
+            draft = {
+                'draft_id': draft_id,
+                'approach': approach['name'],
+                'tone': approach['tone'],
+                'focus': approach['focus'],
+                'subject': selected_subject,
+                'subject_alternatives': subject_lines[1:4] if len(subject_lines) > 1 else [],
+                'email_body': email_body,
+                'email_format': 'html',
+                'recipient_email': recipient_identity.get('email'),
+                'recipient_name': recipient_identity.get('full_name'),
+                'customer_first_name': recipient_identity.get('first_name'),
+                'call_to_action': self._extract_call_to_action(email_body),
+                'personalization_score': self._calculate_personalization_score(email_body, customer_data),
+                'generated_at': datetime.now().isoformat(),
+                'status': 'draft',
+                'metadata': {
+                    'customer_company': company_info.get('name', 'Unknown'),
+                    'contact_name': contact_info.get('name', 'Unknown'),
+                    'recipient_email': recipient_identity.get('email'),
+                    'recipient_name': recipient_identity.get('full_name'),
+                    'email_format': 'html',
+                    'recommended_product': recommended_product.get('product_name', 'Unknown') if recommended_product else 'Unknown',
+                    'pain_points_addressed': len([p for p in pain_points if p.get('severity') in ['high', 'medium']]),
+                    'generation_method': 'llm_powered'
                 }
-            ]
-            
-            generated_drafts = []
-            
-            for approach in draft_approaches:
-                try:
-                    # Generate email content for this approach
-                    email_content = self._generate_single_email_draft(
-                        customer_data, recommended_product, scoring_data, 
-                        approach, context
-                    )
-                    
-                    # Generate subject lines for this approach
-                    subject_lines = self._generate_subject_lines(
-                        customer_data, recommended_product, approach, context
-                    )
-                    
-                    draft_id = f"uuid:{str(uuid.uuid4())}"
-                    draft_approach = approach['name']
-                    draft_type = "initial"
-                    
-                    # Select the best subject line (first one, or most relevant)
-                    selected_subject = subject_lines[0] if subject_lines else f"Partnership opportunity for {company_info.get('name', 'your company')}"
-                    
-                    draft = {
-                        'draft_id': draft_id,
-                        'approach': approach['name'],
-                        'tone': approach['tone'],
-                        'focus': approach['focus'],
-                        'subject': selected_subject,  # Single subject instead of array
-                        'subject_alternatives': subject_lines[1:4] if len(subject_lines) > 1 else [],  # Store alternatives separately
-                        'email_body': email_content,
-                        'call_to_action': self._extract_call_to_action(email_content),
-                        'personalization_score': self._calculate_personalization_score(email_content, customer_data),
-                        'generated_at': datetime.now().isoformat(),
-                        'status': 'draft',
-                        'metadata': {
-                            'customer_company': company_info.get('name', 'Unknown'),
-                            'contact_name': contact_info.get('name', 'Unknown'),
-                            'recommended_product': recommended_product.get('product_name', 'Unknown'),
-                            'pain_points_addressed': len([p for p in pain_points if p.get('severity') in ['high', 'medium']]),
-                            'generation_method': 'llm_powered'
-                        }
-                    }
-                    
-                    generated_drafts.append(draft)
-                    
-                except Exception as e:
-                    self.logger.warning(f"Failed to generate draft for approach {approach['name']}: {str(e)}")
-                    continue
-            
-            if not generated_drafts:
-                # Fallback to simple template if all LLM generations fail
-                self.logger.warning("All LLM draft generations failed, using fallback template")
-                return self._generate_fallback_draft(customer_data, recommended_product, context)
-            
-            self.logger.info(f"Generated {len(generated_drafts)} email drafts successfully")
-            return generated_drafts
-            
-        except Exception as e:
-            self.logger.error(f"Email draft generation failed: {str(e)}")
-            return self._generate_fallback_draft(customer_data, recommended_product, context)
+            }
+
+            generated_drafts.append(draft)
+
+        if not generated_drafts:
+            raise RuntimeError("LLM returned no outreach drafts; initial outreach cannot proceed.")
+
+        self.logger.info("Generated %s email drafts successfully", len(generated_drafts))
+        return generated_drafts
 
     def _generate_email_drafts_from_prompt(self, customer_data: Dict[str, Any], recommended_product: Dict[str, Any], scoring_data: Dict[str, Any], context: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Attempt to generate drafts using configured prompt template."""
@@ -707,13 +924,47 @@ class InitialOutreachStage(BaseStage):
     def _build_prompt_replacements(self, customer_data: Dict[str, Any], recommended_product: Dict[str, Any], scoring_data: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, str]:
         input_data = context.get('input_data', {})
         company_info = customer_data.get('companyInfo', {}) or {}
-        contact_info = customer_data.get('primaryContact', {}) or {}
+        contact_info = dict(customer_data.get('primaryContact', {}) or {})
+        stage_results = context.get('stage_results', {}) or {}
+        data_acquisition = {}
+        if isinstance(stage_results, dict):
+            data_acquisition = stage_results.get('data_acquisition', {}).get('data', {}) or {}
+        if not contact_info.get('name'):
+            fallback_contact_name = (
+                data_acquisition.get('contact_name')
+                or data_acquisition.get('customer_contact')
+                or input_data.get('recipient_name')
+                or input_data.get('customer_name')
+            )
+            if fallback_contact_name:
+                contact_info['name'] = fallback_contact_name
+        if not contact_info.get('email'):
+            fallback_email = (
+                data_acquisition.get('customer_email')
+                or data_acquisition.get('contact_email')
+                or input_data.get('recipient_address')
+                or input_data.get('customer_email')
+            )
+            if fallback_email:
+                contact_info['email'] = fallback_email
+        customer_data = dict(customer_data)
+        customer_data['primaryContact'] = contact_info
         language = input_data.get('language') or company_info.get('language') or 'English'
         contact_name = contact_info.get('name') or input_data.get('customer_name') or input_data.get('recipient_name') or 'there'
         company_name = company_info.get('name') or input_data.get('company_name') or 'the company'
         staff_name = input_data.get('staff_name') or input_data.get('sender_name') or 'Sales Team'
         org_name = input_data.get('org_name') or 'Our Company'
         selected_product_name = recommended_product.get('product_name') if recommended_product else None
+        language_lower = language.lower() if isinstance(language, str) else ''
+        name_parts = contact_name.split() if isinstance(contact_name, str) else []
+        if name_parts:
+            if language_lower in ('vietnamese', 'vi'):
+                first_name = name_parts[-1]
+            else:
+                first_name = name_parts[0]
+        else:
+            first_name = contact_name or ''
+        context.setdefault('customer_first_name', first_name or contact_name or '')
 
         action = input_data.get('action', 'draft_write')
         action_labels = {
@@ -741,6 +992,7 @@ class InitialOutreachStage(BaseStage):
             '##staff_name##': staff_name,
             '##org_name##': org_name,
             '##first_name_guide##': first_name_guide,
+            '##customer_first_name##': first_name or contact_name,
             '##selected_product##': selected_product_name or 'our solution',
             '##company_info##': company_summary,
             '##selected_product_info##': product_summary
@@ -824,15 +1076,133 @@ class InitialOutreachStage(BaseStage):
             return ''
 
         language_lower = language.lower()
+        name_parts = contact_name.split() if contact_name else []
         if language_lower in ('vietnamese', 'vi'):
             if not contact_name or contact_name.lower() == 'a person':
                 return "If the recipient's name is unknown, use `anh/chi` in the greeting."
-            first_name = self._extract_first_name(contact_name)
-            if first_name:
-                return f"For Vietnamese recipients, use `anh/chi {first_name}` in the greeting to keep it respectful."
+            vn_name = name_parts[-1] if name_parts else contact_name
+            if vn_name:
+                return f"For Vietnamese recipients, use `anh/chi {vn_name}` in the greeting to keep it respectful. Do not use placeholders or omit the honorific."
             return "For Vietnamese recipients, use `anh/chi` followed by the recipient's first name in the greeting."
 
-        return ''
+        if name_parts:
+            en_name = name_parts[0]
+            return (
+                f'Use only the recipient\'s first name "{en_name}" in the greeting. '
+                f'Start with "Hi {en_name}," or "Hello {en_name}," and do not use the surname or placeholders.'
+            )
+        return 'If the recipient name is unknown, use a neutral greeting like "Hi there," without placeholders.'
+
+    def _resolve_primary_sales_rep(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        team_id = context.get('input_data', {}).get('team_id') or self.config.get('team_id')
+        if not team_id:
+            return {}
+        reps = self.get_team_setting('gs_team_rep', team_id, [])
+        if not isinstance(reps, list):
+            return {}
+        for rep in reps:
+            if rep and rep.get('is_primary'):
+                return rep
+        return reps[0] if reps else {}
+
+    def _sanitize_email_body(self, html: str, staff_name: str, rep_profile: Dict[str, Any], customer_first_name: str) -> str:
+        if not html:
+            return ''
+
+        replacements = {
+            '[Your Name]': rep_profile.get('name') or staff_name,
+            '[Your Email]': rep_profile.get('email'),
+            '[Your Phone Number]': rep_profile.get('phone') or rep_profile.get('primary_phone'),
+            '[Your Phone]': rep_profile.get('phone') or rep_profile.get('primary_phone'),
+            '[Your Title]': rep_profile.get('position'),
+            '[Your LinkedIn Profile]': rep_profile.get('linkedin') or rep_profile.get('linkedin_profile'),
+            '[Your LinkedIn Profile URL]': rep_profile.get('linkedin') or rep_profile.get('linkedin_profile'),
+            '[Your Website]': rep_profile.get('website'),
+        }
+
+        for placeholder, value in replacements.items():
+            if value:
+                html = html.replace(placeholder, str(value))
+            else:
+                html = html.replace(placeholder, '')
+
+        html = re.sub(r'\[Your[^<\]]+\]?', '', html, flags=re.IGNORECASE)
+
+        if '<p' not in html.lower():
+            lines = [line.strip() for line in html.splitlines() if line.strip()]
+            if lines:
+                html = ''.join(f'<p>{line}</p>' for line in lines)
+
+        html = self._deduplicate_greeting(html, customer_first_name or '')
+        html = re.sub(r'(<p>\s*</p>)+', '', html, flags=re.IGNORECASE)
+        return html
+
+    def _deduplicate_greeting(self, html: str, customer_first_name: str) -> str:
+        paragraphs = re.findall(r'(<p.*?>.*?</p>)', html, flags=re.IGNORECASE | re.DOTALL)
+        if not paragraphs:
+            return html
+
+        greeting_seen = False
+        cleaned: List[str] = []
+        for para in paragraphs:
+            text = self._strip_html_tags(para).strip()
+            normalized_para = para
+            if self._looks_like_greeting(text):
+                normalized_para = self._standardize_greeting_paragraph(para, customer_first_name)
+                if greeting_seen:
+                    continue
+                greeting_seen = True
+            cleaned.append(normalized_para)
+
+        remainder = re.sub(r'(<p.*?>.*?</p>)', '__PARA__', html, flags=re.IGNORECASE | re.DOTALL)
+        rebuilt = ''
+        idx = 0
+        for segment in remainder.split('__PARA__'):
+            rebuilt += segment
+            if idx < len(cleaned):
+                rebuilt += cleaned[idx]
+                idx += 1
+        if idx < len(cleaned):
+            rebuilt += ''.join(cleaned[idx:])
+        return rebuilt
+
+    def _looks_like_greeting(self, text: str) -> bool:
+        lowered = text.lower().replace('\xa0', ' ').strip()
+        return lowered.startswith(('hi ', 'hello ', 'dear '))
+
+    def _standardize_greeting_paragraph(self, paragraph_html: str, customer_first_name: str) -> str:
+        text = self._strip_html_tags(paragraph_html).strip()
+        lowered = text.lower()
+        first_word = next((candidate.title() for candidate in ('dear', 'hello', 'hi') if lowered.startswith(candidate)), 'Hi')
+
+        if customer_first_name:
+            greeting = f"{first_word} {customer_first_name},"
+        else:
+            greeting = f"{first_word} there,"
+
+        remainder = ''
+        match = re.match(r' *(hi|hello|dear)\b[^,]*,(.*)', text, flags=re.IGNORECASE | re.DOTALL)
+        if match:
+            remainder = match.group(2).lstrip()
+        elif lowered.startswith(('hi', 'hello', 'dear')):
+            parts = text.split(',', 1)
+            if len(parts) > 1:
+                remainder = parts[1].lstrip()
+        else:
+            remainder = text[len(text.split(' ', 1)[0]):].lstrip()
+
+        if remainder:
+            sanitized_text = f"{greeting} {remainder}".strip()
+        else:
+            sanitized_text = greeting
+
+        return re.sub(
+            r'(<p.*?>).*?(</p>)',
+            lambda m: f"{m.group(1)}{sanitized_text}{m.group(2)}",
+            paragraph_html,
+            count=1,
+            flags=re.IGNORECASE | re.DOTALL
+        )
 
     def _extract_first_name(self, full_name: str) -> str:
         if not full_name:
@@ -891,6 +1261,10 @@ class InitialOutreachStage(BaseStage):
             self.logger.debug('Skipping prompt entry because email body is empty: %s', entry)
             return None
 
+        recipient_identity = self._resolve_recipient_identity(customer_data, context)
+        if recipient_identity.get('first_name') and not context.get('customer_first_name'):
+            context['customer_first_name'] = recipient_identity['first_name']
+
         subject = entry.get('subject')
         if isinstance(subject, list):
             subject = subject[0] if subject else ''
@@ -938,10 +1312,19 @@ class InitialOutreachStage(BaseStage):
         call_to_action = self._extract_call_to_action(email_body)
         personalization_score = self._calculate_personalization_score(email_body, customer_data)
         message_type = entry.get('message_type') or 'Email'
+        rep_profile = getattr(self, '_active_rep_profile', {}) or {}
+        staff_name = context.get('input_data', {}).get('staff_name') or self.config.get('staff_name', 'Sales Team')
+        first_name = recipient_identity.get('first_name') or context.get('customer_first_name') or context.get('input_data', {}).get('customer_name') or ''
+        email_body = self._sanitize_email_body(email_body, staff_name, rep_profile, first_name)
+        if '<html' not in email_body.lower():
+            email_body = f"<html><body>{email_body}</body></html>"
 
         metadata = {
             'customer_company': customer_data.get('companyInfo', {}).get('name', 'Unknown'),
             'contact_name': customer_data.get('primaryContact', {}).get('name', 'Unknown'),
+            'recipient_email': recipient_identity.get('email'),
+            'recipient_name': recipient_identity.get('full_name'),
+            'email_format': 'html',
             'recommended_product': product_name or 'Unknown',
             'generation_method': 'prompt_template',
             'tags': tags,
@@ -960,6 +1343,10 @@ class InitialOutreachStage(BaseStage):
             'subject': subject,
             'subject_alternatives': subject_alternatives,
             'email_body': email_body,
+            'email_format': 'html',
+            'recipient_email': recipient_identity.get('email'),
+            'recipient_name': recipient_identity.get('full_name'),
+            'customer_first_name': recipient_identity.get('first_name'),
             'call_to_action': call_to_action,
             'product_mention': product_mention,
             'product_name': product_name,
@@ -1018,13 +1405,13 @@ class InitialOutreachStage(BaseStage):
             )
             
             # Clean and validate the generated content
-            cleaned_content = self._clean_email_content(email_content)
+            cleaned_content = self._clean_email_content(email_content, context)
             
             return cleaned_content
             
         except Exception as e:
-            self.logger.error(f"Failed to generate single email draft: {str(e)}")
-            return self._generate_template_email(customer_data, recommended_product, approach, context)
+            self.logger.error("LLM single draft generation failed for approach %s: %s", approach.get('name'), e)
+            raise RuntimeError(f"Failed to generate draft for approach {approach.get('name')}") from e
 
     def _create_email_generation_prompt(self, customer_context: Dict[str, Any], approach: Dict[str, Any]) -> str:
         """Create LLM prompt for email generation."""
@@ -1129,35 +1516,74 @@ Generate 4 subject lines, one per line, no numbering or bullets:"""
             f"5-minute chat about {company_name}?"
         ]
 
-    def _clean_email_content(self, raw_content: str) -> str:
-        """Clean and validate generated email content."""
-        # Remove any unwanted prefixes or suffixes
-        content = raw_content.strip()
-        
-        # Remove common LLM artifacts
-        artifacts_to_remove = [
+    def _clean_email_content(
+        self,
+        raw_content: str,
+        context: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """
+        Clean and normalize generated email content, returning HTML.
+        """
+        content = (raw_content or "").replace("\r\n", "\n").strip()
+
+        artifacts_to_remove = (
             "Here's the email:",
             "Here is the email:",
             "Email content:",
             "Generated email:",
             "Subject:",
             "Email:"
-        ]
-        
+        )
+
         for artifact in artifacts_to_remove:
             if content.startswith(artifact):
                 content = content[len(artifact):].strip()
-        
-        # Ensure proper email structure
-        if not content.startswith(('Dear', 'Hi', 'Hello', 'Greetings')):
-            # Add a greeting if missing
+
+        lines = [line.strip() for line in content.split('\n') if line.strip()]
+        content = '\n\n'.join(lines)
+
+        if not content:
+            return "<html><body></body></html>"
+
+        if not content.lower().startswith(('dear ', 'hi ', 'hello ', 'greetings')):
             content = f"Dear Valued Customer,\n\n{content}"
-        
-        # Ensure proper closing
-        if not any(closing in content.lower() for closing in ['best regards', 'sincerely', 'best', 'thanks']):
-            content += "\n\nBest regards"
-        
-        return content
+
+        closings = ('best regards', 'sincerely', 'thanks', 'thank you', 'kind regards')
+        if not any(closing in content.lower() for closing in closings):
+            content += "\n\nBest regards,\n[Your Name]"
+
+        ctx = context or {}
+        input_data = ctx.get('input_data', {}) or {}
+        rep_profile = getattr(self, '_active_rep_profile', {}) or {}
+        staff_name = input_data.get('staff_name') or self.config.get('staff_name') or 'Sales Team'
+        identity = ctx.get('_recipient_identity') or {}
+        customer_first_name = (
+            identity.get('first_name')
+            or ctx.get('customer_first_name')
+            or input_data.get('customer_first_name')
+            or input_data.get('recipient_name')
+            or input_data.get('customer_name')
+            or ''
+        )
+
+        sanitized = self._sanitize_email_body(content, staff_name, rep_profile, customer_first_name)
+        if '<html' not in sanitized.lower():
+            sanitized = f"<html><body>{sanitized}</body></html>"
+
+        return sanitized
+
+    def _ensure_html_email(self, raw_content: Any, context: Dict[str, Any]) -> str:
+        """
+        Normalize potentially plain-text content into HTML output.
+        """
+        if raw_content is None:
+            return "<html><body></body></html>"
+
+        text = str(raw_content)
+        if '<html' in text.lower():
+            return text
+
+        return self._clean_email_content(text, context)
 
     def _extract_call_to_action(self, email_content: str) -> str:
         """Extract the main call-to-action from email content."""
@@ -1228,54 +1654,17 @@ Generate 4 subject lines, one per line, no numbering or bullets:"""
 
         return min(score, 100)
 
-    def _generate_template_email(self, customer_data: Dict[str, Any], recommended_product: Dict[str, Any], 
-                               approach: Dict[str, Any], context: Dict[str, Any]) -> str:
-        """Generate email using template as fallback."""
-        input_data = context.get('input_data', {})
-        company_info = customer_data.get('companyInfo', {})
-        contact_info = customer_data.get('primaryContact', {})
-        
-        return f"""Dear {contact_info.get('name', 'there')},
-
-I hope this email finds you well. I'm reaching out from {input_data.get('org_name', 'our company')} regarding a potential opportunity for {company_info.get('name', 'your company')}.
-
-Based on our research of companies in the {company_info.get('industry', 'technology')} sector, I believe {company_info.get('name', 'your company')} could benefit from our {recommended_product.get('product_name', 'solution')}.
-
-We've helped similar organizations achieve significant improvements in their operations. Would you be interested in a brief 15-minute call to discuss how we might be able to help {company_info.get('name', 'your company')} achieve its goals?
-
-Best regards,
-{input_data.get('staff_name', 'Sales Team')}
-{input_data.get('org_name', 'Our Company')}"""
-
-    def _generate_fallback_draft(self, customer_data: Dict[str, Any], recommended_product: Dict[str, Any], context: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Generate fallback draft when LLM generation fails."""
-        draft_id = f"uuid:{str(uuid.uuid4())}"
-        draft_approach = "fallback"
-        draft_type = "initial"
-        
-        return [{
-            'draft_id': draft_id,
-            'approach': 'fallback_template',
-            'tone': 'professional',
-            'focus': 'general outreach',
-            'subject': self._generate_fallback_subject_lines(customer_data, recommended_product)[0],
-            'subject_alternatives': self._generate_fallback_subject_lines(customer_data, recommended_product)[1:],
-            'email_body': self._generate_template_email(customer_data, recommended_product, {'tone': 'professional'}, context),
-            'call_to_action': 'Would you be interested in a brief call?',
-            'personalization_score': 50,
-            'generated_at': datetime.now().isoformat(),
-            'status': 'draft',
-            'metadata': {
-                'generation_method': 'template_fallback',
-                'note': 'Generated using template due to LLM failure'
-            }
-        }]
-
     def _get_mock_email_drafts(self, customer_data: Dict[str, Any], recommended_product: Dict[str, Any], context: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Get mock email drafts for dry run."""
         input_data = context.get('input_data', {})
         company_info = customer_data.get('companyInfo', {})
         
+        recipient_identity = self._resolve_recipient_identity(customer_data, context)
+        context.setdefault('_recipient_identity', recipient_identity)
+        mock_body = f"""[DRY RUN] Mock email content for {company_info.get('name', 'Test Company')}
+
+This is a mock email that would be generated for testing purposes. In a real execution, this would contain personalized content based on the customer's company information, pain points, and our product recommendations."""
+
         return [{
             'draft_id': 'mock_draft_001',
             'approach': 'professional_direct',
@@ -1286,16 +1675,21 @@ Best regards,
                 f"Quick Question About {company_info.get('name', 'Test Company')}",
                 f"Helping Companies Like {company_info.get('name', 'Test Company')}"
             ],
-            'email_body': f"""[DRY RUN] Mock email content for {company_info.get('name', 'Test Company')}
-
-This is a mock email that would be generated for testing purposes. In a real execution, this would contain personalized content based on the customer's company information, pain points, and our product recommendations.""",
+            'email_body': self._clean_email_content(mock_body, context),
+            'email_format': 'html',
+            'recipient_email': recipient_identity.get('email'),
+            'recipient_name': recipient_identity.get('full_name'),
+            'customer_first_name': recipient_identity.get('first_name'),
             'call_to_action': 'Mock call to action',
             'personalization_score': 85,
             'generated_at': datetime.now().isoformat(),
             'status': 'mock',
             'metadata': {
                 'generation_method': 'mock_data',
-                'note': 'This is mock data for dry run testing'
+                'note': 'This is mock data for dry run testing',
+                'recipient_email': recipient_identity.get('email'),
+                'recipient_name': recipient_identity.get('full_name'),
+                'email_format': 'html'
             }
         }]
 
@@ -1645,6 +2039,7 @@ This is a mock email that would be generated for testing purposes. In a real exe
                 rewritten['email_body'] = f"[DRY RUN - REWRITTEN: {reason}] " + existing_draft.get('email_body', '')
                 rewritten['rewrite_reason'] = reason
                 rewritten['rewritten_at'] = datetime.now().isoformat()
+                rewritten.setdefault('email_format', 'html')
                 return rewritten
             
             input_data = context.get('input_data', {})
@@ -1683,7 +2078,7 @@ Generate only the rewritten email content:"""
             )
             
             # Clean the rewritten content
-            cleaned_content = self._clean_email_content(rewritten_content)
+            cleaned_content = self._clean_email_content(rewritten_content, context)
             
             # Create rewritten draft object
             rewritten = existing_draft.copy()
@@ -1696,6 +2091,12 @@ Generate only the rewritten email content:"""
             rewritten['version'] = existing_draft.get('version', 1) + 1
             rewritten['call_to_action'] = self._extract_call_to_action(cleaned_content)
             rewritten['personalization_score'] = self._calculate_personalization_score(cleaned_content, customer_data)
+            recipient_identity = context.get('_recipient_identity') or self._resolve_recipient_identity(customer_data, context)
+            if recipient_identity:
+                rewritten['recipient_email'] = recipient_identity.get('email')
+                rewritten['recipient_name'] = recipient_identity.get('full_name')
+                rewritten['customer_first_name'] = recipient_identity.get('first_name')
+            rewritten['email_format'] = 'html'
             
             # Update metadata
             if 'metadata' not in rewritten:
@@ -1707,6 +2108,10 @@ Generate only the rewritten email content:"""
                 'original_draft_id': existing_draft.get('draft_id')
             })
             rewritten['metadata']['generation_method'] = 'llm_rewrite'
+            if recipient_identity:
+                rewritten['metadata']['recipient_email'] = recipient_identity.get('email')
+                rewritten['metadata']['recipient_name'] = recipient_identity.get('full_name')
+            rewritten['metadata']['email_format'] = 'html'
             
             self.logger.info(f"Successfully rewrote draft based on reason: {reason}")
             return rewritten
@@ -1722,6 +2127,16 @@ Generate only the rewritten email content:"""
             rewritten['rewrite_reason'] = reason
             rewritten['rewritten_at'] = datetime.now().isoformat()
             rewritten['metadata'] = {'generation_method': 'template_rewrite', 'error': str(e)}
+            rewritten['email_body'] = self._clean_email_content(rewritten['email_body'], context)
+            fallback_identity = context.get('_recipient_identity') or self._resolve_recipient_identity(customer_data, context)
+            if fallback_identity:
+                rewritten['recipient_email'] = fallback_identity.get('email')
+                rewritten['recipient_name'] = fallback_identity.get('full_name')
+                rewritten['customer_first_name'] = fallback_identity.get('first_name')
+                rewritten['metadata']['recipient_email'] = fallback_identity.get('email')
+                rewritten['metadata']['recipient_name'] = fallback_identity.get('full_name')
+            rewritten['metadata']['email_format'] = 'html'
+            rewritten['email_format'] = 'html'
             return rewritten
 
     def _save_rewritten_draft(self, context: Dict[str, Any], rewritten_draft: Dict[str, Any], original_draft_id: str) -> Dict[str, Any]:

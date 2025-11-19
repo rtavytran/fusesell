@@ -54,6 +54,25 @@ def test_update_product_merges_changes(data_manager):
     assert stored["key_features"] == updated["keyFeatures"]
 
 
+def test_save_product_respects_explicit_status(data_manager):
+    payload = _sample_product_payload("prod-inactive", status="inactive")
+    product_id = data_manager.save_product(payload)
+
+    stored = data_manager.get_product(product_id)
+    assert stored["status"] == "inactive"
+
+
+def test_update_product_status_helper_toggles_state(data_manager):
+    payload = _sample_product_payload("prod-toggle")
+    product_id = data_manager.save_product(payload)
+
+    assert data_manager.update_product_status(product_id, "inactive")
+    assert data_manager.get_product(product_id)["status"] == "inactive"
+
+    assert data_manager.update_product_status(product_id, "active")
+    assert data_manager.get_product(product_id)["status"] == "active"
+
+
 def test_get_products_by_org_returns_active_products_only(data_manager):
     active = _sample_product_payload("prod-active")
     inactive = _sample_product_payload("prod-inactive")
@@ -61,14 +80,75 @@ def test_get_products_by_org_returns_active_products_only(data_manager):
     data_manager.save_product(active)
     data_manager.save_product(inactive)
 
-    # Mark one product inactive directly to exercise status filtering
-    with sqlite3.connect(data_manager.db_path) as conn:
-        conn.execute(
-            "UPDATE products SET status = 'inactive' WHERE product_id = ?",
-            (inactive["product_id"],),
-        )
-        conn.commit()
+    # Mark one product inactive to exercise status filtering
+    data_manager.update_product_status(inactive["product_id"], "inactive")
 
     results = data_manager.get_products_by_org(active["org_id"])
     assert len(results) == 1
     assert results[0]["product_id"] == active["product_id"]
+
+
+def test_search_products_filters_by_keyword(data_manager):
+    alpha = _sample_product_payload(
+        "prod-alpha",
+        productName="Alpha CRM",
+        shortDescription="CRM automation platform",
+        keywords=["CRM", "pipeline"],
+    )
+    beta = _sample_product_payload(
+        "prod-beta",
+        productName="Beta Ops",
+        shortDescription="Operations toolkit",
+        keywords=["ops"],
+    )
+
+    data_manager.save_product(alpha)
+    data_manager.save_product(beta)
+
+    results = data_manager.search_products(
+        org_id="org-123",
+        search_term="crm",
+    )
+
+    assert len(results) == 1
+    assert results[0]["product_id"] == "prod-alpha"
+
+
+def test_search_products_limit_and_sort(data_manager):
+    first = _sample_product_payload("prod-c", productName="Charlie Suite")
+    second = _sample_product_payload("prod-a", productName="Alpha Suite")
+    third = _sample_product_payload("prod-b", productName="Bravo Suite")
+
+    data_manager.save_product(first)
+    data_manager.save_product(second)
+    data_manager.save_product(third)
+
+    # Update timestamps to control order
+    with sqlite3.connect(data_manager.db_path) as conn:
+        conn.execute(
+            "UPDATE products SET updated_at = ? WHERE product_id = ?",
+            ("2024-01-01 10:00:00", "prod-a"),
+        )
+        conn.execute(
+            "UPDATE products SET updated_at = ? WHERE product_id = ?",
+            ("2024-01-02 10:00:00", "prod-b"),
+        )
+        conn.execute(
+            "UPDATE products SET updated_at = ? WHERE product_id = ?",
+            ("2024-01-03 10:00:00", "prod-c"),
+        )
+        conn.commit()
+
+    by_name = data_manager.search_products(
+        org_id="org-123",
+        sort="name",
+        limit=2,
+    )
+    assert [p["product_id"] for p in by_name] == ["prod-a", "prod-b"]
+
+    by_updated = data_manager.search_products(
+        org_id="org-123",
+        sort="updated_at",
+        limit=2,
+    )
+    assert [p["product_id"] for p in by_updated] == ["prod-c", "prod-b"]

@@ -199,8 +199,17 @@ python fusesell.py product update <product_id> \
 
 #### List Products
 ```bash
-python fusesell.py product list --org-id <org_id>
+python fusesell.py product list --org-id <org_id> \
+  [--status active|inactive|all] \
+  [--search-term "<keyword>"] \
+  [--limit <number>] \
+  [--sort name|created_at|updated_at]
 ```
+
+- `--status`: Filter by lifecycle state (defaults to `active`)
+- `--search-term`: Keyword matched against name, descriptions, and keywords
+- `--limit`: Return only the first N matching products
+- `--sort`: Control ordering (`name` ascending, `created_at`/`updated_at` newest first)
 
 ### Settings Management Commands
 

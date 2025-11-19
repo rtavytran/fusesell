@@ -40,6 +40,20 @@ def test_update_team_modifies_selected_fields(data_manager):
     assert stored["plan_name"] == updated_plan
 
 
+def test_team_status_can_be_toggled(data_manager):
+    payload = _team_payload("team-status")
+    data_manager.save_team(**payload)
+
+    stored = data_manager.get_team(payload["team_id"])
+    assert stored["status"] == "active"
+
+    assert data_manager.update_team_status(payload["team_id"], "inactive")
+    assert data_manager.get_team(payload["team_id"])["status"] == "inactive"
+
+    assert data_manager.update_team(payload["team_id"], status="active")
+    assert data_manager.get_team(payload["team_id"])["status"] == "active"
+
+
 def test_list_teams_returns_all_for_org(data_manager):
     first = _team_payload("team-001")
     second = _team_payload("team-002", name="Inbound Squad")

@@ -1122,6 +1122,31 @@ class LocalDataManager:
         import uuid
         return f"uuid:{str(uuid.uuid4())}"
 
+    def _normalize_status_value(self, status: Optional[Union[str, bool]]) -> Optional[str]:
+        """
+        Normalize activation status values.
+
+        Args:
+            status: Status value provided by the caller
+
+        Returns:
+            Normalized status ("active"/"inactive") or None if not provided
+        """
+        if status is None:
+            return None
+
+        if isinstance(status, bool):
+            return 'active' if status else 'inactive'
+
+        normalized = str(status).strip().lower()
+        if not normalized:
+            return None
+
+        if normalized not in {'active', 'inactive'}:
+            raise ValueError("Status must be 'active' or 'inactive'")
+
+        return normalized
+
     # ===== TEAM MANAGEMENT METHODS =====
 
     def save_team(
@@ -1134,7 +1159,8 @@ class LocalDataManager:
         description: str = None,
         plan_name: str = None,
         project_code: str = None,
-        avatar: str = None
+        avatar: str = None,
+        status: Optional[Union[str, bool]] = None
     ) -> str:
         """
         Save or update team information.
@@ -1157,25 +1183,28 @@ class LocalDataManager:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
 
-                # Check if team exists
-                cursor.execute("SELECT team_id FROM teams WHERE team_id = ?", (team_id,))
-                exists = cursor.fetchone()
+                cursor.execute("SELECT status FROM teams WHERE team_id = ?", (team_id,))
+                existing_row = cursor.fetchone()
+                normalized_status = self._normalize_status_value(status)
+                status_value = normalized_status or (
+                    existing_row[0] if existing_row and len(existing_row) > 0 else None
+                ) or 'active'
 
-                if exists:
+                if existing_row:
                     # Update existing team
                     cursor.execute("""
                         UPDATE teams SET
                             org_name = ?, plan_name = ?, project_code = ?, name = ?, description = ?,
-                            avatar = ?, updated_at = CURRENT_TIMESTAMP
+                            avatar = ?, status = ?, updated_at = CURRENT_TIMESTAMP
                         WHERE team_id = ?
-                    """, (org_name, plan_name, project_code, name, description, avatar, team_id))
+                    """, (org_name, plan_name, project_code, name, description, avatar, status_value, team_id))
                 else:
                     # Insert new team
                     cursor.execute("""
                         INSERT INTO teams 
-                        (team_id, org_id, org_name, plan_id, plan_name, project_code, name, description, avatar)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (team_id, org_id, org_name, plan_id, plan_name, project_code, name, description, avatar))
+                        (team_id, org_id, org_name, plan_id, plan_name, project_code, name, description, avatar, status)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (team_id, org_id, org_name, plan_id, plan_name, project_code, name, description, avatar, status_value))
 
                 conn.commit()
                 self.logger.debug(f"Saved team: {team_id}")
@@ -1240,7 +1269,8 @@ class LocalDataManager:
         description: str = None,
         plan_name: str = None,
         project_code: str = None,
-        avatar: str = None
+        avatar: str = None,
+        status: Optional[Union[str, bool]] = None
     ) -> bool:
         """
         Update team information.
@@ -1279,6 +1309,11 @@ class LocalDataManager:
                 if avatar is not None:
                     updates.append("avatar = ?")
                     params.append(avatar)
+                if status is not None:
+                    normalized_status = self._normalize_status_value(status)
+                    if normalized_status is not None:
+                        updates.append("status = ?")
+                        params.append(normalized_status)
 
                 if not updates:
                     return True  # Nothing to update
@@ -1295,6 +1330,45 @@ class LocalDataManager:
 
         except Exception as e:
             self.logger.error(f"Error updating team {team_id}: {str(e)}")
+            raise
+
+    def update_team_status(
+        self,
+        team_id: str,
+        status: Union[str, bool]
+    ) -> bool:
+        """
+        Update the activation status for a team.
+
+        Args:
+            team_id: Team identifier
+            status: Target status ("active" or "inactive")
+
+        Returns:
+            True if a record was updated
+        """
+        normalized_status = self._normalize_status_value(status)
+        if normalized_status is None:
+            raise ValueError("Status is required when updating team status")
+
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    UPDATE teams
+                    SET status = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE team_id = ?
+                    """,
+                    (normalized_status, team_id)
+                )
+                conn.commit()
+                if cursor.rowcount:
+                    self.logger.debug(f"Updated team status: {team_id} -> {normalized_status}")
+                return cursor.rowcount > 0
+
+        except Exception as e:
+            self.logger.error(f"Error updating team status {team_id}: {str(e)}")
             raise
 
     # ===== TEAM SETTINGS MANAGEMENT METHODS =====
@@ -1649,12 +1723,14 @@ class LocalDataManager:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
 
-                # Check if product exists
                 cursor.execute(
-                    "SELECT product_id FROM products WHERE product_id = ?", (product_id,))
-                exists = cursor.fetchone()
+                    "SELECT status FROM products WHERE product_id = ?", (product_id,))
+                existing_row = cursor.fetchone()
+                existing_status = existing_row[0] if existing_row else None
+                normalized_status = self._normalize_status_value(product_data.get('status'))
+                status_value = normalized_status or existing_status or 'active'
 
-                if exists:
+                if existing_row:
                     # Update existing product
                     cursor.execute("""
                         UPDATE products 
@@ -1668,7 +1744,7 @@ class LocalDataManager:
                             success_metrics = ?, product_variants = ?, availability = ?, technical_specifications = ?,
                             compatibility = ?, support_info = ?, regulatory_compliance = ?, localization = ?,
                             installation_requirements = ?, user_manual_url = ?, return_policy = ?, shipping_info = ?,
-                            updated_at = CURRENT_TIMESTAMP
+                            status = ?, updated_at = CURRENT_TIMESTAMP
                         WHERE product_id = ?
                     """, (
                         product_data.get('org_id'), product_data.get(
@@ -1732,6 +1808,7 @@ class LocalDataManager:
                         product_data.get('returnPolicy'),
                         json.dumps(product_data.get('shippingInfo')) if product_data.get(
                             'shippingInfo') else None,
+                        status_value,
                         product_id
                     ))
                 else:
@@ -1744,8 +1821,8 @@ class LocalDataManager:
                          sales_contact_email, image_url, sales_metrics, customer_feedback, keywords, related_products,
                          seasonal_demand, market_insights, case_studies, testimonials, success_metrics, product_variants,
                          availability, technical_specifications, compatibility, support_info, regulatory_compliance,
-                         localization, installation_requirements, user_manual_url, return_policy, shipping_info)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                         localization, installation_requirements, user_manual_url, return_policy, shipping_info, status)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
                         product_id, product_data.get('org_id'), product_data.get(
                             'org_name'), product_data.get('project_code'),
@@ -1807,7 +1884,8 @@ class LocalDataManager:
                             'userManualUrl'),
                         product_data.get('returnPolicy'),
                         json.dumps(product_data.get('shippingInfo')) if product_data.get(
-                            'shippingInfo') else None
+                            'shippingInfo') else None,
+                        status_value
                     ))
 
                 conn.commit()
@@ -2059,7 +2137,8 @@ class LocalDataManager:
                 'installationRequirements': existing_product.get('installation_requirements'),
                 'userManualUrl': existing_product.get('user_manual_url'),
                 'returnPolicy': existing_product.get('return_policy'),
-                'shippingInfo': existing_product.get('shipping_info')
+                'shippingInfo': existing_product.get('shipping_info'),
+                'status': existing_product.get('status')
             }
             
             # Merge existing data with updates
@@ -2073,6 +2152,41 @@ class LocalDataManager:
 
         except Exception as e:
             self.logger.error(f"Error updating product {product_id}: {str(e)}")
+            raise
+
+    def update_product_status(self, product_id: str, status: Union[str, bool]) -> bool:
+        """
+        Update activation status for a product.
+
+        Args:
+            product_id: Product identifier
+            status: Target status ("active" or "inactive")
+
+        Returns:
+            True if a product record was updated
+        """
+        normalized_status = self._normalize_status_value(status)
+        if normalized_status is None:
+            raise ValueError("Status is required when updating product status")
+
+        try:
+            with sqlite3.connect(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    UPDATE products
+                    SET status = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE product_id = ?
+                    """,
+                    (normalized_status, product_id)
+                )
+                conn.commit()
+                if cursor.rowcount:
+                    self.logger.debug(f"Updated product status: {product_id} -> {normalized_status}")
+                return cursor.rowcount > 0
+
+        except Exception as e:
+            self.logger.error(f"Failed to update product status {product_id}: {str(e)}")
             raise
 
     def save_scoring_criteria(self, org_id: str, criteria: List[Dict[str, Any]]) -> None:
