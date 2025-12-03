@@ -33,5 +33,5 @@ __all__ = [
 ]
 
 __version__ = "1.3.3"
-__author__ = "FuseSell Team"
-__description__ = "Local implementation of FuseSell AI sales automation pipeline"
+__author__ = "RealTimeX Team (info@realtimex.ai)"
+__description__ = "Complete AI-powered sales automation pipeline that runs entirely on your local machine."
