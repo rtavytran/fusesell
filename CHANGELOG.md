@@ -2,6 +2,11 @@
 
 All notable changes to FuseSell Local will be documented in this file.
 
+# [1.3.10] - 2025-12-11
+
+### Added
+- Introduced a shared `write_full_output_html` helper in `fusesell_local.utils` so flows can render consistent HTML output and raw JSON without duplicating fallback implementations. The helper is exported via `fusesell_local.utils` for downstream reuse.
+
 # [1.3.3] - 2025-10-25
 
 ### Changed

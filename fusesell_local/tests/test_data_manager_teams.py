@@ -7,8 +7,7 @@ def _team_payload(team_id: str = "team-001", **overrides):
         "plan_name": "FuseSell AI",
         "project_code": "proj-001",
         "name": "Outbound Squad",
-        "description": "Primary outreach team",
-        "avatar": "https://fusesell.test/avatar.png",
+        "description": "A test team",
     }
     payload.update(overrides)
     return payload

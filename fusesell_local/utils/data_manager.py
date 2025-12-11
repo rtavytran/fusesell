@@ -1239,7 +1239,7 @@ class LocalDataManager:
             self.logger.error(f"Error getting team {team_id}: {str(e)}")
             raise
 
-    def list_teams(self, org_id: str) -> List[Dict[str, Any]]:
+    def list_teams(self, org_id: str, status: Optional[str] = "active") -> List[Dict[str, Any]]:
         """
         List all teams for an organization.
 
@@ -1250,9 +1250,26 @@ class LocalDataManager:
             List of team data
         """
         try:
+            # Normalize status
+            normalized_status: Optional[str] = status
+            if isinstance(normalized_status, str):
+                normalized_status = normalized_status.strip().lower()
+            if normalized_status not in {'active', 'inactive', 'all'}:
+                normalized_status = 'active'
+
+            where_clauses = ["org_id = ?"]
+            params: List[Any] = [org_id]
+
+            if normalized_status != 'all':
+                where_clauses.append("status = ?")
+                params.append(normalized_status)
+
+            query = "SELECT * FROM teams WHERE " + " AND ".join(where_clauses)
+            query += " ORDER BY created_at DESC"
+            
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT * FROM teams WHERE org_id = ? ORDER BY created_at DESC", (org_id,))
+                cursor.execute(query, params)
                 rows = cursor.fetchall()
 
                 columns = [description[0] for description in cursor.description]

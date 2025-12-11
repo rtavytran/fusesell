@@ -8,16 +8,43 @@ def _sample_product_payload(product_id: str = "prod-001", **overrides):
         "org_name": "FuseSell Org",
         "project_code": "proj-001",
         "productName": "FuseSell AI Suite",
-        "shortDescription": "AI-powered sales automation",
+        "shortDescription": "AI-powered sales automation platform",
         "longDescription": "Comprehensive automation platform for revenue teams.",
         "category": "Software",
         "subcategory": "Sales Automation",
         "targetUsers": ["Sales reps"],
         "keyFeatures": ["Automation", "CRM sync"],
         "uniqueSellingPoints": ["Privacy-first"],
+        "painPointsSolved": ["Manual processes"],
+        "competitiveAdvantages": ["Scalability"],
         "pricing": {"monthly": 199},
         "pricingRules": {"currency": "USD"},
         "productWebsite": "https://fusesell.test/ai-suite",
+        "demoAvailable": False,
+        "trialAvailable": False,
+        "salesContactEmail": "sales@fusesell.test",
+        "imageUrl": "https://fusesell.test/image.png",
+        "salesMetrics": {},
+        "customerFeedback": [],
+        "keywords": ["AI", "CRM"],
+        "relatedProducts": [],
+        "seasonalDemand": {},
+        "marketInsights": {},
+        "caseStudies": [],
+        "testimonials": [],
+        "successMetrics": {},
+        "productVariants": [],
+        "availability": "In Stock",
+        "technicalSpecifications": {},
+        "compatibility": [],
+        "supportInfo": {},
+        "regulatoryCompliance": [],
+        "localization": [],
+        "installationRequirements": "",
+        "userManualUrl": "",
+        "returnPolicy": "",
+        "shippingInfo": {},
+        "status": "active" # Default status
     }
     payload.update(overrides)
     return payload
@@ -66,10 +93,10 @@ def test_update_product_status_helper_toggles_state(data_manager):
     payload = _sample_product_payload("prod-toggle")
     product_id = data_manager.save_product(payload)
 
-    assert data_manager.update_product_status(product_id, "inactive")
+    assert data_manager.update_product(product_id, {"status": "inactive"})
     assert data_manager.get_product(product_id)["status"] == "inactive"
 
-    assert data_manager.update_product_status(product_id, "active")
+    assert data_manager.update_product(product_id, {"status": "active"})
     assert data_manager.get_product(product_id)["status"] == "active"
 
 
@@ -81,7 +108,7 @@ def test_get_products_by_org_returns_active_products_only(data_manager):
     data_manager.save_product(inactive)
 
     # Mark one product inactive to exercise status filtering
-    data_manager.update_product_status(inactive["product_id"], "inactive")
+    data_manager.update_product(inactive["product_id"], {"status": "inactive"})
 
     results = data_manager.get_products_by_org(active["org_id"])
     assert len(results) == 1
