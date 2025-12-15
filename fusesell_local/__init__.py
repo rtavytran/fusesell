@@ -32,6 +32,6 @@ __all__ = [
     "validate_config",
 ]
 
-__version__ = "1.3.9"
+__version__ = "1.3.19"
 __author__ = "RealTimeX Team (info@realtimex.ai)"
 __description__ = "Complete AI-powered sales automation pipeline that runs entirely on your local machine."

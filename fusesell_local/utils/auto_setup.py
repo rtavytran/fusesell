@@ -220,21 +220,19 @@ def generate_agent_context(
     teams = manager.list_teams(org_id=org_id, status='active')
     team = teams[0] if teams else None
 
-    if not team:
-        return {
-            'workspace_summary': 'No team configured',
-            'products': [],
-            'active_processes': [],
-            'team_settings': {},
-            'statistics': {},
-            'last_updated': datetime.utcnow().isoformat() + 'Z',
-        }
+    team_id = None
+    team_name = org_id or 'Workspace Team'
+    team_created_at = 'N/A'
 
-    team_id = team.get('team_id')
-    team_name = team.get('team_name', 'Unnamed Team')
+    if team:
+        team_id = team.get('team_id')
+        team_name = team.get('name') or team.get('team_name') or team_name
+        team_created_at = team.get('created_at', 'N/A')
 
-    # Get products
-    products = manager.list_products(org_id=org_id, status='active')
+    # Get products (include all, track active separately)
+    products = manager.search_products(org_id=org_id, status="all") or []
+    active_products_count = sum(1 for p in products if (p.get('status') or '').lower() == 'active')
+    inactive_products_count = len(products) - active_products_count
 
     # Apply detail limit if specified
     if detail_limit is not None and detail_limit > 0:
@@ -244,8 +242,10 @@ def generate_agent_context(
                     if len(product[key]) > detail_limit:
                         product[key] = product[key][:detail_limit] + '...'
 
-    # Get settings
-    settings = manager.get_team_settings(team_id) or {}
+    # Get settings (fallback to empty when team not yet created)
+    settings: Dict[str, Any] = {}
+    if team_id:
+        settings = manager.get_team_settings(team_id) or {}
 
     # Get processes
     all_processes = manager.list_tasks(org_id=org_id, limit=100)
@@ -263,12 +263,29 @@ def generate_agent_context(
                         process[key] = process[key][:detail_limit] + '...'
 
     # Calculate completion status
-    completion_status = check_settings_completion(manager, team_id)
+    completion_status = check_settings_completion(manager, team_id) if team_id else {
+        'completed': 0,
+        'total': 0,
+        'completed_keys': [],
+        'missing_keys': [
+            'gs_team_organization',
+            'gs_team_rep',
+            'gs_team_product',
+            'gs_team_auto_interaction',
+            'gs_team_initial_outreach',
+            'gs_team_follow_up',
+            'gs_team_schedule_time',
+            'gs_team_followup_schedule_time',
+        ],
+        'auto_interaction_completed': False,
+        'has_sales_rep': False,
+        'has_products': len(products) > 0,
+    }
 
     # Build workspace summary
     workspace_summary_parts = [
         f"Team: {team_name}",
-        f"Products: {len(products)} active",
+        f"Products: {len(products)} total ({active_products_count} active)",
         f"Active Processes: {len(active_processes)}",
     ]
 
@@ -281,11 +298,18 @@ def generate_agent_context(
 
     return {
         'workspace_summary': workspace_summary,
+        'workspace_slug': manager.data_dir,  # best-effort; flows can override in writer
+        'team_id': team_id,
+        'team_name': team_name,
+        'team_created_at': team_created_at,
+        'org_id': org_id,
         'products': products,
         'active_processes': active_processes,
         'team_settings': settings,
         'statistics': {
             'total_products': len(products),
+            'active_products': active_products_count,
+            'inactive_products': inactive_products_count,
             'active_processes': len(active_processes),
             'total_processes': len(all_processes),
             'settings_completion': completion_status,

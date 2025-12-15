@@ -15,6 +15,7 @@ from .auto_setup import (
     should_update_agent_context,
     get_gmail_email_safe,
 )
+from .agent_context import notify_action_completed, write_agent_md, get_agent_md_path
 
 __all__ = [
     'LocalDataManager',
@@ -29,4 +30,7 @@ __all__ = [
     'generate_agent_context',
     'should_update_agent_context',
     'get_gmail_email_safe',
+    'notify_action_completed',
+    'write_agent_md',
+    'get_agent_md_path',
 ]

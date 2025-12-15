@@ -2,6 +2,47 @@
 
 All notable changes to FuseSell Local will be documented in this file.
 
+# [1.3.19] - 2025-12-15
+
+### Fixed
+- Agent context generation no longer bails out when no team is present (single-team/no-team flows); falls back to workspace/org metadata while still rendering product catalog and stats.
+- Team names now read from the correct `name` column, preventing blank team titles in agent.md.
+
+# [1.3.13] - 2025-12-15
+
+### Fixed
+- Agent context generation now includes all products (not just active), so product sections render correctly in agent.md even when products are not marked active.
+
+# [1.3.14] - 2025-12-15
+
+### Fixed
+- Agent context uses `search_products(..., status="all")` to avoid filtering to active-only products inside `generate_agent_context`, ensuring product listings render even when status is not set to active.
+
+# [1.3.15] - 2025-12-15
+
+### Fixed
+- Agent context writer now resolves `workspace_slug` from flow variables when provided and tolerates toolkit lookup failures, preventing agent.md from writing to the wrong path for non-default workspaces.
+
+# [1.3.16] - 2025-12-15
+
+### Changed
+- Refined `agent_context` markdown output to include richer sections (summary, product catalog with totals, active processes with counts, settings completion, team settings snapshot, statistics) to better mirror the original RealtimeX flow structure.
+
+# [1.3.17] - 2025-12-15
+
+### Changed
+- Simplified agent.md rendering to a condensed, text-first layout (no JSON dumps), mirroring the original RealtimeX flow structure while retaining product/process counts and settings completion summaries.
+
+# [1.3.18] - 2025-12-15
+
+### Fixed
+- Agent context now includes workspace/team identity (workspace slug, org_id, team id/name/created), active/inactive product counts, and uses concise sections matching the original RealtimeX layout. Ensures injected metadata from the writer is preserved in the rendered output.
+
+# [1.3.12] - 2025-12-15
+
+### Added
+- Added `fusesell_local.utils.agent_context` with `notify_action_completed` and `write_agent_md` so downstream flows can refresh agent context without importing local scripts; functions gracefully fall back when `realtimex_toolkit` is unavailable.
+
 # [1.3.10] - 2025-12-11
 
 ### Added
