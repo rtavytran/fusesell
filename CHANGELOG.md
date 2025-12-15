@@ -2,6 +2,14 @@
 
 All notable changes to FuseSell Local will be documented in this file.
 
+# [1.3.21] - 2025-12-15
+
+### Changed
+- Agent context lists are capped (5 items with “… more”), active products show names only, and recent activity replaces product-only changes.
+- Product readiness now depends on linked team products (`gs_team_product`), matching workspace settings completion.
+- Auto-interaction section now shows the sending email/tool when configured.
+- Removed the agent editable section from agent.md outputs to keep files concise.
+
 # [1.3.20] - 2025-12-15
 
 ### Changed

@@ -50,30 +50,21 @@ def get_agent_md_path(workspace_slug: str, agent_id: str) -> Path:
     )
 
 
-def _format_products(products: List[Dict[str, Any]], limit: int = 8, detail_limit: int = 160) -> str:
+def _format_products(products: List[Dict[str, Any]], limit: int = 5) -> str:
     if not products:
         return "None configured"
 
     lines: List[str] = []
     for product in products[:limit]:
         name = product.get('product_name') or product.get('name') or 'Unknown product'
-        status = product.get('status')
-        desc = product.get('short_description') or product.get('long_description') or ''
-        desc = desc.strip()
-        if desc and len(desc) > detail_limit:
-            desc = desc[:detail_limit] + '...'
-        line = f"- {name}"
-        if status:
-            line += f" ({status})"
-        lines.append(line)
-        if desc:
-            lines.append(f"  - {desc}")
-    if len(products) > limit:
-        lines.append(f"... ({len(products) - limit} more)")
+        lines.append(f"- {name}")
+    remaining = len(products) - limit
+    if remaining > 0:
+        lines.append(f"... ({remaining} more)")
     return "\n".join(lines)
 
 
-def _format_processes(processes: List[Dict[str, Any]], limit: int = 8, detail_limit: int = 160) -> str:
+def _format_processes(processes: List[Dict[str, Any]], limit: int = 5, detail_limit: int = 160) -> str:
     if not processes:
         return "None"
 
@@ -118,7 +109,8 @@ def _render_agent_markdown(context: Dict[str, Any]) -> str:
     # Quick settings flags (condensed)
     org_profile_configured = bool(team_settings.get('gs_team_organization'))
     reps_configured = bool(team_settings.get('gs_team_rep'))
-    products_linked = bool(team_settings.get('gs_team_product'))
+    linked_products_data = team_settings.get('gs_team_product') if isinstance(team_settings, dict) else None
+    products_linked = bool(linked_products_data)
     auto_interaction_configured = bool(team_settings.get('gs_team_auto_interaction'))
     follow_up_configured = bool(team_settings.get('gs_team_follow_up'))
 
@@ -136,23 +128,28 @@ def _render_agent_markdown(context: Dict[str, Any]) -> str:
     team_name = context.get('team_name', 'Workspace Team')
     team_created_at = context.get('team_created_at', 'N/A')
 
-    # Product breakdowns
-    recent_product_changes: List[str] = []
+    # Recent activity (best effort) capped at 5
+    recent_activity: List[str] = []
     seven_days_ago = datetime.utcnow() - timedelta(days=7)
-    for product in products:
+    if team_created_at and team_created_at != 'N/A':
+        recent_activity.append(f"- Team created: {team_created_at}")
+    for product in sorted(products, key=lambda p: p.get('created_at') or '', reverse=True):
         created = product.get('created_at')
         if not created:
             continue
         try:
             created_dt = datetime.fromisoformat(created.replace('Z', '+00:00'))
             if created_dt >= seven_days_ago:
-                recent_product_changes.append(
-                    f"- Created: {product.get('product_name', 'Unknown')} ({created_dt.date()})"
+                recent_activity.append(
+                    f"- Product added: {product.get('product_name', 'Unknown')} ({created_dt.date()})"
                 )
         except Exception:
             continue
-    if not recent_product_changes:
-        recent_product_changes.append("No recent changes")
+    if not recent_activity:
+        recent_activity.append("None")
+    if len(recent_activity) > 5:
+        extra = len(recent_activity) - 5
+        recent_activity = recent_activity[:5] + [f"... ({extra} more)"]
 
     # Sales reps
     reps_data = team_settings.get('gs_team_rep') if isinstance(team_settings, dict) else None
@@ -176,9 +173,11 @@ def _render_agent_markdown(context: Dict[str, Any]) -> str:
             sales_poc = f"{first_rep.get('name', 'Unknown')} ({first_rep.get('email', '')})".strip()
     if not reps_list:
         reps_list.append("No sales reps configured")
+    if len(reps_list) > 5:
+        extra = len(reps_list) - 5
+        reps_list = reps_list[:5] + [f"... ({extra} more)"]
 
     # Linked products
-    linked_products_data = team_settings.get('gs_team_product') if isinstance(team_settings, dict) else None
     linked_products_list: List[str] = []
     if isinstance(linked_products_data, list):
         for link in linked_products_data:
@@ -191,6 +190,9 @@ def _render_agent_markdown(context: Dict[str, Any]) -> str:
             linked_products_list.append(f"- {product.get('product_name', pid) if product else pid}")
     if not linked_products_list:
         linked_products_list.append("No products linked to workspace")
+    if len(linked_products_list) > 5:
+        extra = len(linked_products_list) - 5
+        linked_products_list = linked_products_list[:5] + [f"... ({extra} more)"]
 
     # Org profile
     org_profile_data = team_settings.get('gs_team_organization') if isinstance(team_settings, dict) else None
@@ -211,7 +213,7 @@ def _render_agent_markdown(context: Dict[str, Any]) -> str:
     required_settings = {
         "Organization Profile": org_profile_configured,
         "Sales Representatives": reps_configured,
-        "Product Catalog": len(active_products) > 0,
+        "Product Catalog": bool(linked_products_data),
         "Email Automation": auto_interaction_configured,
     }
     required_settings_count = sum(1 for val in required_settings.values() if val)
@@ -245,6 +247,29 @@ def _render_agent_markdown(context: Dict[str, Any]) -> str:
     # Process details
     recently_completed_processes = "None"
 
+    # Auto interaction detail
+    auto_interaction_details = "Not configured"
+    auto_data = team_settings.get('gs_team_auto_interaction') if isinstance(team_settings, dict) else None
+    if isinstance(auto_data, list) and auto_data:
+        entry = auto_data[0]
+        if isinstance(entry, dict):
+            from_email = ""
+            from_block = entry.get('from') or {}
+            if isinstance(from_block, dict):
+                from_email = from_block.get('email') or ""
+            if entry.get('from_email'):
+                from_email = entry.get('from_email')
+            tool = entry.get('tool') or entry.get('tool_type') or 'Unknown tool'
+            auto_interaction_details = f"- Tool: {tool}"
+            if from_email:
+                auto_interaction_details += f"\n- From email: {from_email}"
+    elif isinstance(auto_data, dict) and auto_data:
+        from_email = auto_data.get('from_email') or ''
+        tool = auto_data.get('tool') or auto_data.get('tool_type') or 'Unknown tool'
+        auto_interaction_details = f"- Tool: {tool}"
+        if from_email:
+            auto_interaction_details += f"\n- From email: {from_email}"
+
     return f"""# Workspace Context: {team_name}
 
 > Auto-generated workspace context for FuseSell agent  
@@ -271,8 +296,8 @@ def _render_agent_markdown(context: Dict[str, Any]) -> str:
 ### Draft/Inactive Products
 {_format_products(inactive_products)}
 
-### Recent Product Changes
-{chr(10).join(recent_product_changes)}
+### Recent Activity (last 7 days)
+{chr(10).join(recent_activity)}
 
 ## Active Sales Processes
 
@@ -312,7 +337,7 @@ def _render_agent_markdown(context: Dict[str, Any]) -> str:
 {"Configured" if team_settings.get('gs_team_followup_schedule_time') else "Not configured"}
 
 ### Automation Settings (`gs_team_auto_interaction`)
-{"Configured" if auto_interaction_configured else "Not configured"}
+{auto_interaction_details}
 
 ### Birthday Email (`gs_team_birthday_email`)
 {"Configured" if team_settings.get('gs_team_birthday_email') else "Not configured"}
@@ -451,27 +476,6 @@ def write_agent_md(
 {auto_generated_content}
 
 <!-- END AUTO-GENERATED -->"""
-
-        if agent_section:
-            complete_content += f"\n{agent_section}"
-        else:
-            complete_content += """
-
-<!-- AGENT SECTION -->
-<!-- The FuseSell agent can write below this line to record learnings and context -->
-
-## Agent Learnings & Insights
-
-_The agent will record important learnings, patterns, and customer insights here._
-
-## Active Initiatives
-
-_Current focus areas and ongoing work._
-
-## Key Decisions & Context
-
-_Important decisions and context that should persist across sessions._
-"""
 
         if save_agent_memory:
             new_agent_path = save_agent_memory(
