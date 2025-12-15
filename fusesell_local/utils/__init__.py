@@ -7,6 +7,14 @@ from .llm_client import LLMClient, normalize_llm_base_url
 from .validators import InputValidator
 from .logger import setup_logging
 from .output_helpers import write_full_output_html
+from .auto_setup import (
+    check_settings_completion,
+    auto_initialize_auto_interaction,
+    auto_populate_from_email,
+    generate_agent_context,
+    should_update_agent_context,
+    get_gmail_email_safe,
+)
 
 __all__ = [
     'LocalDataManager',
@@ -15,4 +23,10 @@ __all__ = [
     'InputValidator',
     'setup_logging',
     'write_full_output_html',
+    'check_settings_completion',
+    'auto_initialize_auto_interaction',
+    'auto_populate_from_email',
+    'generate_agent_context',
+    'should_update_agent_context',
+    'get_gmail_email_safe',
 ]
