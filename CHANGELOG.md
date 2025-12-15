@@ -2,6 +2,12 @@
 
 All notable changes to FuseSell Local will be documented in this file.
 
+# [1.3.20] - 2025-12-15
+
+### Changed
+- Agent context markdown now mirrors the original RealtimeX flow layout (workspace/team identity, active/inactive products with recent changes, settings sections, readiness summary, quick reference) while staying text-only.
+- Readiness calculation uses required settings (org profile, reps, product catalog, automation) even when teams are absent, so no-team flows still render meaningful context.
+
 # [1.3.19] - 2025-12-15
 
 ### Fixed

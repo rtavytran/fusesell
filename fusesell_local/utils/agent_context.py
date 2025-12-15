@@ -10,7 +10,7 @@ toolkit is unavailable, agent.md is written directly to the expected path.
 import json
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -104,6 +104,8 @@ def _render_agent_markdown(context: Dict[str, Any]) -> str:
     products = context.get('products') or []
     active_processes = context.get('active_processes') or []
 
+    product_by_id = {p.get('product_id'): p for p in products if p.get('product_id')}
+
     # Product counts
     active_products = [p for p in products if (p.get('status') or '').lower() == 'active']
     inactive_products = [p for p in products if (p.get('status') or '').lower() != 'active']
@@ -134,6 +136,115 @@ def _render_agent_markdown(context: Dict[str, Any]) -> str:
     team_name = context.get('team_name', 'Workspace Team')
     team_created_at = context.get('team_created_at', 'N/A')
 
+    # Product breakdowns
+    recent_product_changes: List[str] = []
+    seven_days_ago = datetime.utcnow() - timedelta(days=7)
+    for product in products:
+        created = product.get('created_at')
+        if not created:
+            continue
+        try:
+            created_dt = datetime.fromisoformat(created.replace('Z', '+00:00'))
+            if created_dt >= seven_days_ago:
+                recent_product_changes.append(
+                    f"- Created: {product.get('product_name', 'Unknown')} ({created_dt.date()})"
+                )
+        except Exception:
+            continue
+    if not recent_product_changes:
+        recent_product_changes.append("No recent changes")
+
+    # Sales reps
+    reps_data = team_settings.get('gs_team_rep') if isinstance(team_settings, dict) else None
+    reps_list: List[str] = []
+    sales_poc = "Not configured"
+    if isinstance(reps_data, list):
+        for rep in reps_data:
+            if not isinstance(rep, dict):
+                continue
+            name = rep.get('name') or 'Unnamed'
+            email = rep.get('email') or ''
+            title = rep.get('position') or rep.get('title') or ''
+            line = f"- {name}"
+            if title:
+                line += f" ({title})"
+            if email:
+                line += f" - {email}"
+            reps_list.append(line)
+        if reps_list:
+            first_rep = reps_data[0]
+            sales_poc = f"{first_rep.get('name', 'Unknown')} ({first_rep.get('email', '')})".strip()
+    if not reps_list:
+        reps_list.append("No sales reps configured")
+
+    # Linked products
+    linked_products_data = team_settings.get('gs_team_product') if isinstance(team_settings, dict) else None
+    linked_products_list: List[str] = []
+    if isinstance(linked_products_data, list):
+        for link in linked_products_data:
+            if not isinstance(link, dict):
+                continue
+            pid = link.get('product_id')
+            if not pid:
+                continue
+            product = product_by_id.get(pid)
+            linked_products_list.append(f"- {product.get('product_name', pid) if product else pid}")
+    if not linked_products_list:
+        linked_products_list.append("No products linked to workspace")
+
+    # Org profile
+    org_profile_data = team_settings.get('gs_team_organization') if isinstance(team_settings, dict) else None
+    org_profile_lines: List[str] = []
+    if isinstance(org_profile_data, list):
+        org_profile_data = org_profile_data[0] if org_profile_data else {}
+    if isinstance(org_profile_data, dict):
+        if org_profile_data.get('legal_name'):
+            org_profile_lines.append(f"- Org Name: {org_profile_data['legal_name']}")
+        if org_profile_data.get('primary_email'):
+            org_profile_lines.append(f"- Primary Email: {org_profile_data['primary_email']}")
+        if org_profile_data.get('address'):
+            org_profile_lines.append(f"- Address: {org_profile_data['address']}")
+    if not org_profile_lines:
+        org_profile_lines.append("Not configured")
+
+    # Required settings readiness
+    required_settings = {
+        "Organization Profile": org_profile_configured,
+        "Sales Representatives": reps_configured,
+        "Product Catalog": len(active_products) > 0,
+        "Email Automation": auto_interaction_configured,
+    }
+    required_settings_count = sum(1 for val in required_settings.values() if val)
+    total_required = len(required_settings)
+    if required_settings_count >= total_required:
+        sales_ready_status = "Fully Ready"
+    elif required_settings_count >= total_required - 1:
+        sales_ready_status = "Almost Ready (1 setting remaining)"
+    elif required_settings_count >= 2:
+        sales_ready_status = "Partially Ready"
+    else:
+        sales_ready_status = "Not Ready"
+    configured_settings_text = "\n".join(
+        [f"- {name}" for name, done in required_settings.items() if done]
+    ) or "None configured"
+    missing_settings_text = "\n".join(
+        [f"- {name}" for name, done in required_settings.items() if not done]
+    ) or "None"
+    ready_to_start = (
+        f"**Status**: Yes, ready to go\n\n"
+        f"- Product: {(active_products[0].get('product_name') if active_products else 'N/A')}\n"
+        f"- Sales Rep: {sales_poc}\n"
+        f"- Method: Email outreach"
+        if required_settings_count >= total_required
+        else f"**Status**: Not yet\n\nComplete these required settings first:\n{missing_settings_text}"
+    )
+
+    primary_product = active_products[0].get('product_name', 'No products configured') if active_products else 'No products configured'
+    target_market = active_products[0].get('short_description', 'Not specified') if active_products else 'Not specified'
+
+    # Process details
+    recently_completed_processes = "None"
+
     return f"""# Workspace Context: {team_name}
 
 > Auto-generated workspace context for FuseSell agent  
@@ -154,8 +265,14 @@ def _render_agent_markdown(context: Dict[str, Any]) -> str:
 
 **Total Products**: {total_products} ({len(active_products)} active, {len(inactive_products)} inactive)
 
-### Products
-{_format_products(products)}
+### Active Products
+{_format_products(active_products)}
+
+### Draft/Inactive Products
+{_format_products(inactive_products)}
+
+### Recent Product Changes
+{chr(10).join(recent_product_changes)}
 
 ## Active Sales Processes
 
@@ -165,17 +282,60 @@ def _render_agent_markdown(context: Dict[str, Any]) -> str:
 ### In Progress
 {_format_processes(active_processes)}
 
-## Sales Settings Completion
+### Recently Completed
+{recently_completed_processes}
 
-{chr(10).join(completion_lines)}
+## Sales Settings Configuration
 
-## Settings Snapshot
+### Organization Profile (`gs_team_organization`)
+{chr(10).join(org_profile_lines)}
 
-- Organization Profile: {"Configured" if org_profile_configured else "Not configured"}
-- Sales Reps: {"Configured" if reps_configured else "Not configured"}
-- Linked Products: {"Configured" if products_linked else "Not configured"}
-- Auto Interaction: {"Configured" if auto_interaction_configured else "Not configured"}
-- Follow-up: {"Configured" if follow_up_configured else "Not configured"}
+### Sales Representatives (`gs_team_rep`)
+**Configured Reps**: {len(reps_data) if isinstance(reps_data, list) else 0}
+{chr(10).join(reps_list)}
+
+### Product-Team Links (`gs_team_product`)
+**Linked Products**: {len(linked_products_data) if isinstance(linked_products_data, list) else 0}
+{chr(10).join(linked_products_list)}
+
+### Initial Outreach (`gs_team_initial_outreach`)
+{"Configured" if team_settings.get('gs_team_initial_outreach') else "Not configured"}
+
+### Follow-up Configuration (`gs_team_follow_up`)
+{"Configured" if follow_up_configured else "Not configured"}
+
+### Schedule Windows
+**Initial Outreach** (`gs_team_schedule_time`):
+{"Configured" if team_settings.get('gs_team_schedule_time') else "Not configured"}
+
+**Follow-up** (`gs_team_followup_schedule_time`):
+{"Configured" if team_settings.get('gs_team_followup_schedule_time') else "Not configured"}
+
+### Automation Settings (`gs_team_auto_interaction`)
+{"Configured" if auto_interaction_configured else "Not configured"}
+
+### Birthday Email (`gs_team_birthday_email`)
+{"Configured" if team_settings.get('gs_team_birthday_email') else "Not configured"}
+
+## Configuration Readiness
+
+- **Sales Ready**: {sales_ready_status}
+- **Setup Completion**: {int((required_settings_count/total_required)*100)}% ({required_settings_count} of {total_required} required settings configured)
+
+### Required Configuration Status
+
+#### Configured Settings
+{configured_settings_text}
+
+### Ready to Start Selling?
+
+{ready_to_start}
+
+### Quick Reference
+
+**Primary Product**: {primary_product}
+**Target Market**: {target_market}
+**Sales Point of Contact**: {sales_poc}
 """
 
 
