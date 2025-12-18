@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "fusesell"
-version = "1.3.21"
+version = "1.3.35"
 description = "Complete AI-powered sales automation pipeline that runs entirely on your local machine."
 readme = "README.md"
 license = "MIT"
@@ -59,4 +59,8 @@ packages = [
 py-modules = ["fusesell"]
 
 [tool.setuptools.package-data]
-fusesell_local = ["config/*.json"]
+fusesell_local = [
+    "config/default_prompts.json",
+    "config/default_scoring_criteria.json",
+    "config/default_email_templates.json"
+]
