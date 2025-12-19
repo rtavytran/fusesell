@@ -359,13 +359,49 @@ OpenAI API integration with error handling and response parsing.
 
 **Key Methods:**
 
-##### `call_llm(prompt: str, model: str = 'gpt-4o-mini', **kwargs) -> str`
+##### `call_llm(prompt: str, model: str = 'gpt-4.1-mini', **kwargs) -> str`
 Makes API call to OpenAI with retries and error handling.
 
 ##### `parse_json_response(response: str) -> Dict[str, Any]`
 Parses JSON responses from LLM with fallback handling.
 
 ## Configuration System
+
+FuseSell uses a **two-tier configuration system** that provides production-ready defaults while allowing easy customization.
+
+### Configuration Architecture
+
+**Tier 1: Default System Configs** (Packaged with FuseSell)
+- Located in `fusesell_local/config/`
+- Included in the pip package
+- Available immediately after installation
+- Files:
+  - `default_prompts.json` - Email generation prompts for all stages
+  - `default_scoring_criteria.json` - Lead scoring rules and weights
+  - `default_email_templates.json` - Email templates and structures
+
+**Tier 2: Custom User Configs** (Optional)
+- Located in `data_dir/config/` (default: `./fusesell_data/config/`)
+- Created by users for customization
+- Automatically override defaults when present
+- Files:
+  - `prompts.json` - Custom email generation prompts
+  - `scoring_criteria.json` - Custom lead scoring rules
+  - `email_templates.json` - Custom email templates
+
+### How Configuration Loading Works
+
+When FuseSell needs a configuration:
+1. Load default config from package (`fusesell_local/config/default_*.json`)
+2. Check if custom config exists (`data_dir/config/*.json`)
+3. If custom exists, merge it with default (custom values override)
+4. If custom doesn't exist, use default
+
+This means:
+- ✅ FuseSell works out-of-the-box with sensible defaults
+- ✅ Users can customize only what they need
+- ✅ Unspecified values fall back to defaults
+- ✅ No manual setup required for basic usage
 
 ### Team-Specific Configuration
 
@@ -479,9 +515,100 @@ class CustomStage(BaseStage):
 
 ### Customizing LLM Prompts
 
-1. Edit `fusesell_data/config/prompts.json`
-2. Use placeholders for dynamic content: `{customer_name}`, `{company_name}`
-3. Test prompts with dry-run mode
+FuseSell uses a two-tier prompt system that allows easy customization through natural language:
+
+#### Default System Prompts
+
+Default prompts are packaged with FuseSell and stored in `fusesell_local/config/default_prompts.json`. These provide production-ready templates for all stages.
+
+#### Custom User Prompts
+
+Custom prompts override defaults and are stored in your data directory: `data_dir/config/prompts.json`
+
+#### Customization via Natural Language
+
+You can customize prompts using natural language through the `gs_team_initial_outreach` configuration:
+
+**Example:**
+```python
+from fusesell_local.utils.data_manager import LocalDataManager
+from fusesell_local.utils.llm_client import LLMClient
+
+# Initialize
+data_manager = LocalDataManager('./fusesell_data')
+llm_client = LLMClient(api_key='your-api-key')
+
+# Save team settings with customization request
+data_manager.save_team_settings(
+    team_id='team123',
+    org_id='org456',
+    plan_id='plan789',
+    team_name='Sales Team',
+    gs_team_initial_outreach={
+        'tone': 'Friendly',
+        'customization_request': '''
+            Make emails more casual and conversational.
+            Always include a relevant industry statistic.
+            Keep subject lines under 40 characters.
+            Focus on building relationships rather than direct selling.
+        '''
+    },
+    gs_team_auto_interaction=[{
+        "from_email": "your@email.com",
+        "from_name": "Your Name",
+        "from_number": "",
+        "tool_type": "Email",
+        "email_cc": "",
+        "email_bcc": ""
+    }],
+    llm_client=llm_client  # Required for custom prompt generation
+)
+```
+
+This will:
+1. Generate custom prompts based on your request
+2. Save them to `data_dir/config/prompts.json`
+3. Automatically use custom prompts for the initial_outreach stage
+
+#### Required Fields
+
+Certain fields will always be preserved in custom prompts:
+- `tone`: Email tone (Professional, Friendly, etc.)
+- All placeholder variables (##customer_name##, ##company_name##, etc.)
+- JSON output structure requirements
+
+#### Manual Customization
+
+For advanced use cases, you can directly edit `data_dir/config/prompts.json`:
+
+```json
+{
+  "initial_outreach": {
+    "email_generation": "Your custom prompt here with ##placeholders##..."
+  },
+  "follow_up": {
+    "email_generation": "Your custom follow-up prompt..."
+  }
+}
+```
+
+#### Testing Custom Prompts
+
+1. Use dry-run mode to test without sending emails:
+```bash
+fusesell --dry-run --input-website https://example.com
+```
+
+2. Check generated emails in the database:
+```python
+drafts = data_manager.get_email_drafts(execution_id)
+```
+
+#### Prompt Priority
+
+The system loads prompts in this order:
+1. **Custom prompts** from `data_dir/config/prompts.json` (highest priority)
+2. **Default prompts** from `fusesell_local/config/default_prompts.json` (fallback)
 
 ### Adding New Scheduling Rules
 

@@ -413,6 +413,13 @@ class FollowUpStage(BaseStage):
                             'generation_method': 'llm_powered_followup'
                         }
                     }
+
+                    priority_order = self._get_draft_priority_order(
+                        draft,
+                        position=len(generated_drafts) + 1
+                    )
+                    draft['priority_order'] = priority_order
+                    draft['metadata']['priority_order'] = priority_order
                     
                     generated_drafts.append(draft)
                     
@@ -699,6 +706,39 @@ Generate only the email content, no additional commentary:"""
         
         return min(score, 100)
 
+    def _get_draft_priority_order(self, draft: Dict[str, Any], position: int = 1) -> int:
+        """Compute a priority order for follow-up drafts."""
+        try:
+            explicit = int(draft.get('priority_order'))
+            if explicit > 0:
+                return explicit
+        except (TypeError, ValueError):
+            pass
+
+        base_priority = max(1, position)
+        try:
+            personalization_score = float(draft.get('personalization_score', 0))
+        except (TypeError, ValueError):
+            personalization_score = 0
+
+        if personalization_score >= 80:
+            return base_priority
+        if personalization_score >= 60:
+            return base_priority + 1
+        return base_priority + 2
+
+    def _remove_tagline_block(self, content: str) -> str:
+        """Remove tagline rows (e.g., 'Tagline: ...') that often follow the greeting."""
+        if not content:
+            return ''
+
+        import re
+
+        tagline_pattern = re.compile(r'^\s*(tag\s*line|tagline)\b[:\-]?', re.IGNORECASE)
+        lines = content.splitlines()
+        filtered = [line for line in lines if not tagline_pattern.match(line)]
+        return '\n'.join(filtered).strip() if len(filtered) != len(lines) else content
+
     def _clean_email_content(self, raw_content: str) -> str:
         """Clean and validate generated email content."""
         # Remove any unwanted prefixes or suffixes
@@ -717,7 +757,9 @@ Generate only the email content, no additional commentary:"""
         for artifact in artifacts_to_remove:
             if content.startswith(artifact):
                 content = content[len(artifact):].strip()
-        
+
+        content = self._remove_tagline_block(content)
+
         # Ensure proper email structure
         if not content.startswith(('Dear', 'Hi', 'Hello', 'Greetings')):
             # Add a greeting if missing
@@ -1218,7 +1260,7 @@ Generate only the email content, no additional commentary:"""
         """Get mock follow-up drafts for dry run."""
         company_info = customer_data.get('companyInfo', {})
         
-        return [{
+        mock_draft = {
             'draft_id': 'mock_followup_001',
             'approach': 'gentle_reminder',
             'strategy_type': follow_up_strategy.get('strategy_type', 'gentle_reminder'),
@@ -1241,7 +1283,12 @@ This is a mock follow-up email that would be generated for testing purposes. In 
                 'generation_method': 'mock_data',
                 'note': 'This is mock data for dry run testing'
             }
-        }]
+        }
+
+        mock_draft['priority_order'] = self._get_draft_priority_order(mock_draft, position=1)
+        mock_draft['metadata']['priority_order'] = mock_draft['priority_order']
+
+        return [mock_draft]
 
     def validate_input(self, context: Dict[str, Any]) -> bool:
         """
@@ -1267,6 +1314,15 @@ This is a mock follow-up email that would be generated for testing purposes. In 
             
             for draft in follow_up_drafts:
                 try:
+                    priority_order = draft.get('priority_order')
+                    if not isinstance(priority_order, int) or priority_order < 1:
+                        priority_order = self._get_draft_priority_order(
+                            draft,
+                            position=len(saved_drafts) + 1
+                        )
+                        draft['priority_order'] = priority_order
+                        draft.setdefault('metadata', {})['priority_order'] = priority_order
+
                     # Prepare draft data for database
                     draft_data = {
                         'draft_id': draft['draft_id'],
@@ -1288,6 +1344,7 @@ This is a mock follow-up email that would be generated for testing purposes. In 
                             'personalization_score': draft.get('personalization_score', 0),
                             'follow_up_context': draft.get('follow_up_context', {}),
                             'generation_method': 'llm_powered_followup',
+                            'priority_order': priority_order,
                             'generated_at': draft.get('generated_at', datetime.now().isoformat())
                         })
                     }
@@ -1430,7 +1487,7 @@ Generate 3 subject lines, one per line, no numbering or bullets:"""
         draft_approach = "fallback"
         draft_type = "followup"
         
-        return [{
+        fallback_draft = {
             'draft_id': draft_id,
             'approach': 'fallback_template',
             'strategy_type': follow_up_strategy.get('strategy_type', 'gentle_reminder'),
@@ -1447,7 +1504,12 @@ Generate 3 subject lines, one per line, no numbering or bullets:"""
                 'generation_method': 'template_fallback',
                 'note': 'Generated using template due to LLM failure'
             }
-        }]
+        }
+
+        fallback_draft['priority_order'] = self._get_draft_priority_order(fallback_draft, position=1)
+        fallback_draft['metadata']['priority_order'] = fallback_draft['priority_order']
+
+        return [fallback_draft]
 
     def _generate_template_follow_up_email(self, customer_data: Dict[str, Any], recommended_product: Dict[str, Any],
                                          follow_up_strategy: Dict[str, Any], approach: Dict[str, Any], context: Dict[str, Any]) -> str:

@@ -490,6 +490,7 @@ class EventScheduler:
             # Schedule follow-up if this is an initial email
             follow_up_event_id = None
             follow_up_reminder_id = None
+            follow_up_scheduled_time = None
             if email_type == 'initial' and not send_immediately:
                 follow_up_context = None
                 if reminder_context:
@@ -513,6 +514,7 @@ class EventScheduler:
                 if follow_up_result.get('success'):
                     follow_up_event_id = follow_up_result.get('event_id')
                     follow_up_reminder_id = follow_up_result.get('reminder_task_id')
+                    follow_up_scheduled_time = follow_up_result.get('scheduled_time')
                 else:
                     self.logger.warning(
                         "Follow-up scheduling failed for event %s: %s",
@@ -530,7 +532,8 @@ class EventScheduler:
                 'email_type': email_type,
                 'reminder_task_id': reminder_task_id,
                 'follow_up_event_id': follow_up_event_id,
-                'follow_up_reminder_task_id': follow_up_reminder_id
+                'follow_up_reminder_task_id': follow_up_reminder_id,
+                'follow_up_scheduled_time': follow_up_scheduled_time
             }
             
         except Exception as e:

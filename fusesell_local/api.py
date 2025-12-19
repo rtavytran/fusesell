@@ -79,7 +79,7 @@ def build_config(options: OptionsType) -> Dict[str, Any]:
         # API and LLM settings
         "openai_api_key": _get("openai_api_key"),
         "serper_api_key": _get("serper_api_key"),
-        "llm_model": _get("llm_model", "gpt-4o-mini"),
+        "llm_model": _get("llm_model", "gpt-4.1-mini"),
         "llm_base_url": _get("llm_base_url"),
         "temperature": float(_get("temperature", 0.7) or 0.7),
         "max_retries": int(_get("max_retries", 3) or 3),

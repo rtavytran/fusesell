@@ -34,33 +34,53 @@ class InputValidator:
     def validate_url(self, url: str) -> bool:
         """
         Validate URL format and accessibility.
-        
+        Auto-prepends https:// if scheme is missing.
+
         Args:
             url: URL string to validate
-            
+
         Returns:
             True if URL is valid, False otherwise
         """
         if not url or not isinstance(url, str):
             return False
-        
+
         try:
+            # Auto-prepend https:// if no scheme is present
+            url = url.strip()
+            if not url.startswith(('http://', 'https://')):
+                url = f'https://{url}'
+
             # Parse URL
             parsed = urllib.parse.urlparse(url)
-            
+
             # Check required components
             if not parsed.scheme or not parsed.netloc:
                 return False
-            
+
             # Check valid schemes
             if parsed.scheme not in ['http', 'https']:
                 return False
             
             # Check for valid domain format
             domain = parsed.netloc.lower()
-            if not re.match(r'^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', domain):
+
+            # Allow localhost, IP addresses, and standard domains
+            # - localhost (for development)
+            # - IP addresses (e.g., 192.168.1.1, with optional port)
+            # - Standard domains with TLD (e.g., example.com)
+            if domain.startswith('localhost') or domain.split(':')[0] == 'localhost':
+                return True
+
+            # Check for IP address (IPv4)
+            domain_without_port = domain.split(':')[0]
+            if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$', domain_without_port):
+                return True
+
+            # Check for standard domain with TLD
+            if not re.match(r'^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}(:\d+)?$', domain):
                 return False
-            
+
             return True
             
         except Exception as e:

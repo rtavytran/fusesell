@@ -78,7 +78,7 @@ class LLMClient:
     Handles authentication, rate limiting, and error handling.
     """
     
-    def __init__(self, api_key: str, model: str = "gpt-4o-mini", base_url: Optional[str] = None):
+    def __init__(self, api_key: str, model: str = "gpt-4.1-mini", base_url: Optional[str] = None):
         """
         Initialize LLM client.
         

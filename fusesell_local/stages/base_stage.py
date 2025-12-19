@@ -42,7 +42,7 @@ class BaseStage(ABC):
                 # Initialize with base URL if provided
                 llm_kwargs = {
                     'api_key': config['openai_api_key'],
-                    'model': config.get('llm_model', 'gpt-4o-mini')
+                    'model': config.get('llm_model', 'gpt-4.1-mini')
                 }
                 if config.get('llm_base_url'):
                     llm_kwargs['base_url'] = config['llm_base_url']
@@ -305,12 +305,13 @@ class BaseStage(ABC):
     def get_prompt_template(self, prompt_key: str) -> str:
         """
         Get prompt template from configuration.
-        
+        Prioritizes custom user prompts over default system prompts.
+
         Args:
             prompt_key: Key for the prompt template
-            
+
         Returns:
-            Prompt template string
+            Prompt template string (custom if available, otherwise default)
         """
         try:
             prompts = self.data_manager.load_prompts()

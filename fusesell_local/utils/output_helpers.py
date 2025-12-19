@@ -487,6 +487,93 @@ def _render_email_drafts(drafts: Any) -> str:
     return "".join(rows)
 
 
+def _render_all_email_drafts(drafts: Any, *, show_schedule: bool = False) -> str:
+    """Render all email drafts (no filtering) with rendered HTML preview."""
+    if not isinstance(drafts, list) or not drafts:
+        return "<div class='muted'>No email drafts found.</div>"
+
+    seen = set()
+    rows = []
+    for idx, draft in enumerate(drafts, start=1):
+        if not isinstance(draft, dict):
+            continue
+        key = draft.get("draft_id") or draft.get("id") or id(draft)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        subject = draft.get("subject") or f"Draft {idx}"
+        created = _format_timestamp(draft.get("created_at"))
+        draft_type = _first_non_empty(draft.get("draft_type") or draft.get("type"))
+        priority = _first_non_empty(
+            draft.get("priority_order"),
+            (draft.get("metadata") or {}).get("priority_order"),
+        )
+        chips = []
+        if priority:
+            chips.append(f"<span class='chip strong'>Priority {html.escape(str(priority))}</span>")
+        if draft_type:
+            chips.append(f"<span class='chip'>{html.escape(draft_type)}</span>")
+        if created:
+            chips.append(f"<span class='chip muted-chip'>{html.escape(created)}</span>")
+        chips.append(f"<span class='chip muted-chip'>#{idx}</span>")
+        if key:
+            chips.append(f"<span class='chip muted-chip'>ID: {html.escape(str(key))}</span>")
+
+        if show_schedule:
+            schedule = draft.get("scheduled_send") if isinstance(draft.get("scheduled_send"), dict) else {}
+            scheduled_time = schedule.get("scheduled_time") or schedule.get("scheduled_time_utc")
+            cron_expr = schedule.get("cron_utc") or schedule.get("cron")
+            status = schedule.get("status")
+            if draft.get("selected_for_send"):
+                chips.append("<span class='chip success'>Selected for send</span>")
+            if scheduled_time:
+                chips.append(f"<span class='chip warn'>Scheduled</span>")
+            if cron_expr:
+                chips.append(f"<span class='chip muted-chip'>Cron {html.escape(str(cron_expr))}</span>")
+            if status:
+                chips.append(f"<span class='chip muted-chip'>{html.escape(str(status))}</span>")
+        else:
+            scheduled_time = None
+            status = None
+
+        schedule_html = ""
+        if show_schedule and scheduled_time:
+            schedule_html = (
+                "<div class='schedule-row'>"
+                "<span class='pill pill-warn'>Scheduled Send</span>"
+                f"<span class='schedule-time'>{html.escape(_format_timestamp(scheduled_time))}</span>"
+                + (f"<span class='pill pill-muted'>{html.escape(str(status))}</span>" if status else "")
+                + "</div>"
+            )
+
+        body_html = (
+            draft.get("body_html")
+            or draft.get("content")
+            or draft.get("email_body")
+            or draft.get("html_body")
+            or ""
+        )
+        body_section = "<div class='muted'>No body provided.</div>"
+        if body_html:
+            escaped_srcdoc = html.escape(str(body_html), quote=True)
+            body_section = (
+                "<div class='html-preview'>"
+                f"<iframe class='iframe-draft' sandbox srcdoc=\"{escaped_srcdoc}\" loading='lazy'></iframe>"
+                "</div>"
+            )
+
+        rows.append(
+            "<div class='draft'>"
+            f"<div class='draft-header'><span class='draft-label'>Draft {idx}</span><h4>{html.escape(subject)}</h4></div>"
+            + (f"<div class='chips'>{''.join(chips)}</div>" if chips else "")
+            + schedule_html
+            + body_section
+            + "</div>"
+        )
+    return "".join(rows) or "<div class='muted'>No email drafts found.</div>"
+
+
 def _render_stage_cards(stages: Any) -> str:
     """Render stages as stacked cards with cleaned fields."""
     if not isinstance(stages, list) or not stages:
@@ -1828,6 +1915,137 @@ def _render_query_html(payload: Dict[str, Any], raw_json: str) -> str:
     )
 
 
+def _render_list_drafts_html(payload: Dict[str, Any], raw_json: str) -> str:
+    """Render list_drafts_compact output with rendered HTML email bodies."""
+    items = payload.get("items") if isinstance(payload, dict) else []
+    filters = payload.get("filters") if isinstance(payload, dict) else {}
+    raw_escaped = html.escape(raw_json)
+
+    def _render_filters_table(data: Dict[str, Any]) -> str:
+        if not isinstance(data, dict):
+            return ""
+        rows = []
+        for key, val in data.items():
+            display = _first_non_empty(val)
+            if display is None or display == "":
+                continue
+            rows.append(f"<tr><th>{html.escape(_friendly_key(str(key)))}</th><td>{html.escape(display)}</td></tr>")
+        return "".join(rows)
+
+    def _render_task_card(task: Dict[str, Any]) -> str:
+        title = (
+            task.get("title")
+            or _first_non_empty(task.get("company_name"), task.get("contact_email"), task.get("task_id"))
+            or "Drafts"
+        )
+        chips = []
+        if task.get("company_name"):
+            chips.append(f"<span class='chip'>{html.escape(str(task.get('company_name')))}</span>")
+        if task.get("contact_email"):
+            chips.append(f"<span class='chip muted-chip'>{html.escape(str(task.get('contact_email')))}</span>")
+        if task.get("execution_status"):
+            chips.append(f"<span class='chip'>{html.escape(str(task.get('execution_status')))}</span>")
+        if task.get("task_created_at"):
+            chips.append(f"<span class='chip muted-chip'>{html.escape(_format_timestamp(task.get('task_created_at')))}"
+                         "</span>")
+        selected_ids = task.get("selected_draft_ids")
+        if selected_ids:
+            chips.append(f"<span class='chip success'>Selected drafts: {len(selected_ids)}</span>")
+
+        drafts_html = _render_all_email_drafts(task.get("drafts"), show_schedule=True)
+        chips_html = f"<div class='chips'>{''.join(chips)}</div>" if chips else ""
+
+        return (
+            "<div class='card'>"
+            "<div class='card-header'>"
+            f"<h3>{html.escape(str(title))}</h3>"
+            f"{chips_html}"
+            "</div>"
+            f"{drafts_html}"
+            "</div>"
+        )
+
+    cards = ""
+    if isinstance(items, list):
+        cards = "".join(_render_task_card(task) for task in items if isinstance(task, dict))
+    cards = cards or "<div class='muted'>No drafts found.</div>"
+
+    filters_rows = _render_filters_table(filters)
+    summary_rows = []
+    if isinstance(payload, dict):
+        if payload.get("count") is not None:
+            summary_rows.append(_row("Task Count", _first_non_empty(payload.get("count"))))
+        if payload.get("drafts") is not None:
+            summary_rows.append(_row("Drafts", _first_non_empty(payload.get("drafts"))))
+    summary_html = (
+        "<div class='section'><h2>Summary</h2><table>"
+        f"{''.join(summary_rows) or '<tr><td colspan=\"2\">No summary available.</td></tr>'}"
+        "</table></div>"
+    )
+    filters_section = (
+        f"<div class='section'><h2>Filters</h2><table>{filters_rows}</table></div>" if filters_rows else ""
+    )
+
+    style = (
+        "html,body{margin:0;padding:0;}"
+        "body{font-family:'Segoe UI','Helvetica Neue',Arial,sans-serif;color:#0f172a;background:#f8fafc;line-height:1.6;}"
+        "*{box-sizing:border-box;}"
+        ".container{max-width:1200px;margin:32px auto;background:#fff;border-radius:10px;box-shadow:0 4px 16px rgba(15,23,42,0.07);padding:32px;}"
+        ".section{margin-bottom:24px;}"
+        ".card{background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;padding:18px 20px;box-shadow:0 2px 8px rgba(15,23,42,0.05);margin-bottom:16px;}"
+        ".card-header{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;}"
+        "h1,h2,h3,h4{color:#0f172a;margin:0;}"
+        "table{border-collapse:collapse;width:100%;margin-bottom:12px;table-layout:fixed;}"
+        "th,td{text-align:left;padding:10px 14px;border-bottom:1px solid #e2e8f0;word-break:break-word;}"
+        "th{background:#e2e8f0;font-weight:600;width:240px;}"
+        ".chips{display:flex;gap:10px;flex-wrap:wrap;}"
+        ".chip{background:#e0f2fe;color:#0f172a;padding:4px 14px;border-radius:999px;font-weight:600;font-size:12px;}"
+        ".chip.success{background:#dcfce7;color:#166534;}"
+        ".chip.warn{background:#fef9c3;color:#92400e;}"
+        ".chip.muted-chip{background:#e2e8f0;color:#0f172a;}"
+        ".chip.strong{background:#0ea5e9;color:#0f172a;font-weight:700;}"
+        ".muted{color:#64748b;font-style:italic;}"
+        ".draft{margin-bottom:20px;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;}"
+        ".draft-header{display:flex;align-items:center;gap:10px;margin-bottom:8px;}"
+        ".draft-label{background:#0ea5e9;color:#0f172a;font-weight:700;border-radius:8px;padding:6px 10px;display:inline-flex;align-items:center;gap:6px;}"
+        ".iframe-draft{width:100%;min-height:320px;border:1px solid #e2e8f0;border-radius:8px;margin-top:10px;}"
+        ".html-preview{display:flex;flex-direction:column;gap:8px;}"
+        ".schedule-row{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:8px 0;}"
+        ".pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;font-weight:700;font-size:12px;}"
+        ".pill-warn{background:#fef2f2;color:#991b1b;border:1px solid #fecaca;}"
+        ".pill-muted{background:#e2e8f0;color:#0f172a;}"
+        ".schedule-time{font-weight:700;color:#0f172a;}"
+        "details{margin-top:16px;}"
+        "summary{cursor:pointer;color:#0ea5e9;font-weight:600;}"
+        ".pre{background:#0f172a;color:#e2e8f0;padding:12px;border-radius:8px;overflow:auto;font-family:SFMono-Regular,Consolas,'Liberation Mono',Menlo,monospace;font-size:13px;line-height:1.55;white-space:pre-wrap;word-break:break-word;}"
+        "@media (max-width: 900px){th{width:180px;}}"
+    )
+
+    return (
+        "<!doctype html>"
+        "<html><head><meta charset='utf-8'>"
+        "<title>FuseSell AI - Email Drafts</title>"
+        f"<style>{style}</style>"
+        "</head><body>"
+        "<div class='container'>"
+        "<h1>FuseSell AI - Email Drafts</h1>"
+        f"{summary_html}"
+        f"{filters_section}"
+        "<div class='section'>"
+        "<h2>Drafts</h2>"
+        f"{cards}"
+        "</div>"
+        "<div class='section'>"
+        "<h2>Raw JSON</h2>"
+        "<details><summary>View Full Raw JSON</summary>"
+        f"<pre class='pre'>{raw_escaped}</pre>"
+        "</details>"
+        "</div>"
+        "</div>"
+        "</body></html>"
+    )
+
+
 def write_full_output_html(
     full_payload: Any,
     *,
@@ -1865,6 +2083,24 @@ def write_full_output_html(
                     "mime": "text/html",
                     "size": stat_result.st_size,
                     "created": timestamp,
+                    "filename": filename,
+                    "originalFilename": filename,
+                },
+            }
+
+        if flow_name == "list_drafts_compact":
+            payload_for_drafts = sanitized if isinstance(sanitized, dict) else {"items": sanitized}
+            content = _render_list_drafts_html(payload_for_drafts, raw_serialized)
+            filename = f"{flow_name}_{uuid4().hex}.html"
+            path = html_dir / filename
+            path.write_text(content, encoding="utf-8")
+            stat_result = path.stat()
+            return {
+                "path": str(path),
+                "metadata": {
+                    "mime": "text/html",
+                    "size": stat_result.st_size,
+                    "created": f"{datetime.utcnow().isoformat()}Z",
                     "filename": filename,
                     "originalFilename": filename,
                 },

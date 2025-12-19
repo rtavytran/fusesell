@@ -1,0 +1,154 @@
+{
+  "scoring_weights": {
+    "company_size": 0.25,
+    "industry_fit": 0.2,
+    "pain_points_match": 0.3,
+    "financial_health": 0.15,
+    "technology_readiness": 0.1
+  },
+  "company_size_scores": {
+    "startup": 60,
+    "small": 70,
+    "medium": 85,
+    "large": 90,
+    "enterprise": 95
+  },
+  "industry_multipliers": {
+    "technology": 1.2,
+    "finance": 1.1,
+    "healthcare": 1.0,
+    "manufacturing": 0.9,
+    "retail": 0.8
+  },
+  "pain_point_categories": {
+    "efficiency": 20,
+    "cost_reduction": 25,
+    "growth": 30,
+    "compliance": 15,
+    "customer_experience": 20
+  },
+  "rta": [
+    {
+      "name": "industry_fit",
+      "weight": 25,
+      "definition": "How well the customer's industry aligns with the product's target market",
+      "guidelines": "Score based on industry match and market presence",
+      "scoring_factors": [
+        "Perfect industry match: 80-100",
+        "Related industry: 60-79",
+        "Adjacent industry: 40-59",
+        "Unrelated industry: 0-39"
+      ]
+    },
+    {
+      "name": "company_size",
+      "weight": 20,
+      "definition": "Company size alignment with product's ideal customer profile",
+      "guidelines": "Score based on employee count and revenue alignment",
+      "scoring_factors": [
+        "Ideal size range: 80-100",
+        "Close to ideal: 60-79",
+        "Acceptable size: 40-59",
+        "Poor size fit: 0-39"
+      ]
+    },
+    {
+      "name": "pain_points",
+      "weight": 30,
+      "definition": "How well the product addresses customer's identified pain points",
+      "guidelines": "Score based on pain point alignment and severity",
+      "scoring_factors": [
+        "Addresses all major pain points: 80-100",
+        "Addresses most pain points: 60-79",
+        "Addresses some pain points: 40-59",
+        "Addresses few/no pain points: 0-39"
+      ]
+    },
+    {
+      "name": "product_fit",
+      "weight": 15,
+      "definition": "Overall product-customer compatibility",
+      "guidelines": "Score based on feature alignment and use case match",
+      "scoring_factors": [
+        "Excellent feature match: 80-100",
+        "Good feature match: 60-79",
+        "Basic feature match: 40-59",
+        "Poor feature match: 0-39"
+      ]
+    },
+    {
+      "name": "geographic_market_fit",
+      "weight": 10,
+      "definition": "Geographic alignment between customer location and product availability",
+      "guidelines": "Score based on market presence and localization",
+      "scoring_factors": [
+        "Strong market presence: 80-100",
+        "Moderate presence: 60-79",
+        "Limited presence: 40-59",
+        "No market presence: 0-39"
+      ]
+    }
+  ],
+  "rta_enterprise": [
+    {
+      "name": "budget_authority",
+      "weight": 25,
+      "definition": "Customer's budget authority and financial capacity",
+      "guidelines": "Score based on budget size and decision-making authority",
+      "scoring_factors": [
+        "Confirmed budget >$100k: 90-100",
+        "Estimated budget $50k-$100k: 70-89",
+        "Estimated budget $10k-$50k: 40-69",
+        "No budget information: 0-39"
+      ]
+    },
+    {
+      "name": "technical_fit",
+      "weight": 20,
+      "definition": "Technical requirements alignment with product capabilities",
+      "guidelines": "Score based on technical complexity and integration needs",
+      "scoring_factors": [
+        "Perfect technical match: 80-100",
+        "Good match with minor customization: 60-79",
+        "Moderate match requiring development: 40-59",
+        "Poor technical fit: 0-39"
+      ]
+    },
+    {
+      "name": "decision_timeline",
+      "weight": 15,
+      "definition": "Customer's decision-making timeline and urgency",
+      "guidelines": "Score based on purchase timeline and urgency indicators",
+      "scoring_factors": [
+        "Immediate need (0-3 months): 80-100",
+        "Near-term need (3-6 months): 60-79",
+        "Future need (6-12 months): 40-59",
+        "No defined timeline: 0-39"
+      ]
+    },
+    {
+      "name": "competitive_situation",
+      "weight": 20,
+      "definition": "Competitive landscape and our positioning",
+      "guidelines": "Score based on competitive threats and our advantages",
+      "scoring_factors": [
+        "No competition, clear leader: 80-100",
+        "Preferred vendor, light competition: 60-79",
+        "Competitive situation, even playing field: 40-59",
+        "Strong competition, uphill battle: 0-39"
+      ]
+    },
+    {
+      "name": "stakeholder_engagement",
+      "weight": 20,
+      "definition": "Level of stakeholder engagement and champion strength",
+      "guidelines": "Score based on champion strength and stakeholder buy-in",
+      "scoring_factors": [
+        "Strong champion with executive support: 80-100",
+        "Good champion with some support: 60-79",
+        "Weak champion or mixed support: 40-59",
+        "No champion or opposition: 0-39"
+      ]
+    }
+  ]
+}

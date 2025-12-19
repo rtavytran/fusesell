@@ -1,0 +1,34 @@
+{
+  "initial_outreach": {
+    "formal": {
+      "greeting": "Dear {recipient_name},",
+      "introduction": "I hope this email finds you well. My name is {staff_name} from {org_name}.",
+      "value_proposition": "I noticed that {company_name} operates in the {industry} sector, and I believe our solution could help address some of the challenges you might be facing.",
+      "call_to_action": "Would you be interested in a brief conversation to explore how we might be able to help?",
+      "closing": "Best regards,\n{staff_name}\n{org_name}"
+    },
+    "casual": {
+      "greeting": "Hi {recipient_name},",
+      "introduction": "I'm {staff_name} from {org_name}, and I've been following {company_name}'s work in {industry}.",
+      "value_proposition": "I think there might be some interesting opportunities for us to collaborate and help you tackle {pain_point}.",
+      "call_to_action": "Would you be up for a quick chat to explore this further?",
+      "closing": "Cheers,\n{staff_name}"
+    }
+  },
+  "follow_up": {
+    "no_response": {
+      "greeting": "Hi {recipient_name},",
+      "reference": "I wanted to follow up on my previous email about {topic}.",
+      "value_add": "I thought you might find this relevant: {additional_info}",
+      "call_to_action": "If now isn't the right time, I completely understand. Would a different time work better?",
+      "closing": "Best,\n{staff_name}"
+    },
+    "engaged": {
+      "greeting": "Hi {recipient_name},",
+      "reference": "Thanks for your interest in our previous conversation about {topic}.",
+      "next_step": "As discussed, I've prepared some additional information that might be helpful.",
+      "call_to_action": "When would be a good time for a more detailed discussion?",
+      "closing": "Looking forward to hearing from you,\n{staff_name}"
+    }
+  }
+}

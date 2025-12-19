@@ -29,7 +29,7 @@ class BirthdayEmailManager:
         self.data_manager = LocalDataManager(config.get('data_dir', './fusesell_data'))
         self.llm_client = LLMClient(
             api_key=config.get('openai_api_key'),
-            model=config.get('llm_model', 'gpt-4o-mini'),
+            model=config.get('llm_model', 'gpt-4.1-mini'),
             base_url=config.get('llm_base_url')
         )
         self.logger = logging.getLogger("fusesell.birthday_email")

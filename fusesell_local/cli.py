@@ -312,8 +312,8 @@ Examples:
         advanced_group = parser.add_argument_group('advanced options')
         advanced_group.add_argument(
             '--llm-model',
-            default='gpt-4o-mini',
-            help='LLM model to use (default: gpt-4o-mini)'
+            default='gpt-4.1-mini',
+            help='LLM model to use (default: gpt-4.1-mini)'
         )
         advanced_group.add_argument(
             '--llm-base-url',
@@ -806,6 +806,9 @@ Examples:
             output.append("-" * 20)
             for draft in email_drafts:
                 output.append(f"Subject: {draft.get('subject', 'N/A')}")
+                priority_val = draft.get('priority_order') or draft.get('metadata', {}).get('priority_order')
+                if priority_val:
+                    output.append(f"Priority: {priority_val}")
                 output.append(f"Type: {draft.get('draft_type', 'N/A')}")
 
         return "\n".join(output)

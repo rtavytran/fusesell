@@ -132,7 +132,6 @@ class InitialOutreachStage(BaseStage):
             'action': 'draft_write',
             'status': 'drafts_generated',
             'email_drafts': saved_drafts,
-            'drafts': saved_drafts,
             'recommended_product': recommended_product,
             'customer_summary': self._create_customer_summary(customer_data),
             'total_drafts_generated': len(saved_drafts),
@@ -448,8 +447,9 @@ class InitialOutreachStage(BaseStage):
 
         def _draft_sort_key(draft: Dict[str, Any]) -> tuple[int, float]:
             priority = draft.get('priority_order')
-            if not isinstance(priority, int):
-                priority = 999
+            if not isinstance(priority, int) or priority < 1:
+                priority = self._get_draft_priority_order(draft)
+                draft['priority_order'] = priority
             personalization = draft.get('personalization_score', 0)
             try:
                 personalization_value = float(personalization)
@@ -740,130 +740,45 @@ class InitialOutreachStage(BaseStage):
             scoring_data,
             context
         )
-        if prompt_drafts:
-            return prompt_drafts
-
-        draft_approaches = [
-            {
-                'name': 'professional_direct',
-                'tone': 'professional and direct',
-                'focus': 'business value and ROI',
-                'length': 'concise'
-            },
-            {
-                'name': 'consultative',
-                'tone': 'consultative and helpful',
-                'focus': 'solving specific pain points',
-                'length': 'medium'
-            },
-            {
-                'name': 'industry_expert',
-                'tone': 'industry expert and insightful',
-                'focus': 'industry trends and challenges',
-                'length': 'detailed'
-            },
-            {
-                'name': 'relationship_building',
-                'tone': 'warm and relationship-focused',
-                'focus': 'building connection and trust',
-                'length': 'personal'
-            }
-        ]
-
-        generated_drafts: List[Dict[str, Any]] = []
-
-        for approach in draft_approaches:
-            email_body = self._generate_single_email_draft(
-                customer_data,
-                recommended_product,
-                scoring_data,
-                approach,
-                context
+        if not prompt_drafts:
+            raise RuntimeError(
+                "Email generation prompt template returned no drafts. "
+                "Ensure fusesell_data/config/prompts.json contains initial_outreach.email_generation and is accessible via data_dir."
             )
 
-            subject_lines = self._generate_subject_lines(
-                customer_data, recommended_product, approach, context
-            )
-
-            draft_id = f"uuid:{str(uuid.uuid4())}"
-            selected_subject = subject_lines[0] if subject_lines else f"Partnership opportunity for {company_info.get('name', 'your company')}"
-
-            draft = {
-                'draft_id': draft_id,
-                'approach': approach['name'],
-                'tone': approach['tone'],
-                'focus': approach['focus'],
-                'subject': selected_subject,
-                'subject_alternatives': subject_lines[1:4] if len(subject_lines) > 1 else [],
-                'email_body': email_body,
-                'email_format': 'html',
-                'recipient_email': recipient_identity.get('email'),
-                'recipient_name': recipient_identity.get('full_name'),
-                'customer_first_name': recipient_identity.get('first_name'),
-                'call_to_action': self._extract_call_to_action(email_body),
-                'personalization_score': self._calculate_personalization_score(email_body, customer_data),
-                'generated_at': datetime.now().isoformat(),
-                'status': 'draft',
-                'metadata': {
-                    'customer_company': company_info.get('name', 'Unknown'),
-                    'contact_name': contact_info.get('name', 'Unknown'),
-                    'recipient_email': recipient_identity.get('email'),
-                    'recipient_name': recipient_identity.get('full_name'),
-                    'email_format': 'html',
-                    'recommended_product': recommended_product.get('product_name', 'Unknown') if recommended_product else 'Unknown',
-                    'pain_points_addressed': len([p for p in pain_points if p.get('severity') in ['high', 'medium']]),
-                    'generation_method': 'llm_powered'
-                }
-            }
-
-            generated_drafts.append(draft)
-
-        if not generated_drafts:
-            raise RuntimeError("LLM returned no outreach drafts; initial outreach cannot proceed.")
-
-        self.logger.info("Generated %s email drafts successfully", len(generated_drafts))
-        return generated_drafts
+        self.logger.info("Generated %s email drafts successfully", len(prompt_drafts))
+        return prompt_drafts
 
     def _generate_email_drafts_from_prompt(self, customer_data: Dict[str, Any], recommended_product: Dict[str, Any], scoring_data: Dict[str, Any], context: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Attempt to generate drafts using configured prompt template."""
         prompt_template = self.get_prompt_template('email_generation')
-        if not prompt_template:
-            return []
-
-        try:
-            prompt = self._prepare_email_generation_prompt(
-                prompt_template,
-                customer_data,
-                recommended_product,
-                scoring_data,
-                context
+        if not prompt_template or not prompt_template.strip():
+            raise RuntimeError(
+                "Email generation prompt template missing for initial_outreach.email_generation. "
+                "Provide it in prompts.json under data_dir/config."
             )
-        except Exception as exc:
-            self.logger.warning(f"Failed to prepare email generation prompt: {str(exc)}")
-            return []
+
+        prompt = self._prepare_email_generation_prompt(
+            prompt_template,
+            customer_data,
+            recommended_product,
+            scoring_data,
+            context
+        )
 
         if not prompt or not prompt.strip():
-            self.logger.warning('Email generation prompt resolved to empty content after placeholder replacement')
-            return []
+            raise RuntimeError('Email generation prompt resolved to empty content after placeholder replacement')
 
         temperature = self.get_stage_config('email_generation_temperature', 0.35)
         max_tokens = self.get_stage_config('email_generation_max_tokens', 3200)
 
-        try:
-            response = self.call_llm(
-                prompt=prompt,
-                temperature=temperature,
-                max_tokens=max_tokens
-            )
-        except Exception as exc:
-            self.logger.error(f"LLM call for prompt-based email generation failed: {str(exc)}")
-            return []
+        response = self.call_llm(
+            prompt=prompt,
+            temperature=temperature,
+            max_tokens=max_tokens
+        )
 
-        try:
-            parsed_entries = self._parse_prompt_response(response)
-        except Exception as exc:
-            self.logger.error(f"Failed to parse email generation response: {str(exc)}")
-            return []
+        parsed_entries = self._parse_prompt_response(response)
 
         drafts: List[Dict[str, Any]] = []
         for entry in parsed_entries:
@@ -872,8 +787,7 @@ class InitialOutreachStage(BaseStage):
                 drafts.append(normalized)
 
         if not drafts:
-            self.logger.warning('Prompt-based email generation returned no usable drafts')
-            return []
+            raise RuntimeError('Prompt-based email generation returned no usable drafts')
 
         valid_priority = all(
             isinstance(d.get('priority_order'), int) and d['priority_order'] > 0
@@ -882,9 +796,12 @@ class InitialOutreachStage(BaseStage):
 
         if valid_priority:
             drafts.sort(key=lambda d: d['priority_order'])
+            for draft in drafts:
+                draft.setdefault('metadata', {})['priority_order'] = draft['priority_order']
         else:
             for idx, draft in enumerate(drafts, start=1):
                 draft['priority_order'] = idx
+                draft.setdefault('metadata', {})['priority_order'] = idx
 
         return drafts
 
@@ -1133,9 +1050,43 @@ class InitialOutreachStage(BaseStage):
             if lines:
                 html = ''.join(f'<p>{line}</p>' for line in lines)
 
+        html = self._remove_tagline_block(html)
         html = self._deduplicate_greeting(html, customer_first_name or '')
         html = re.sub(r'(<p>\s*</p>)+', '', html, flags=re.IGNORECASE)
         return html
+
+    def _remove_tagline_block(self, html: str) -> str:
+        if not html:
+            return ''
+
+        tagline_pattern = re.compile(r'^\s*(tag\s*line|tagline)\b[:\-]?', re.IGNORECASE)
+        paragraphs = re.findall(r'(<p.*?>.*?</p>)', html, flags=re.IGNORECASE | re.DOTALL)
+        if paragraphs:
+            cleaned: List[str] = []
+            removed = False
+            for para in paragraphs:
+                text = self._strip_html_tags(para)
+                if tagline_pattern.match(text):
+                    removed = True
+                    continue
+                cleaned.append(para)
+
+            if removed:
+                remainder = re.sub(r'(<p.*?>.*?</p>)', '__PARA__', html, flags=re.IGNORECASE | re.DOTALL)
+                rebuilt = ''
+                idx = 0
+                for segment in remainder.split('__PARA__'):
+                    rebuilt += segment
+                    if idx < len(cleaned):
+                        rebuilt += cleaned[idx]
+                        idx += 1
+                if idx < len(cleaned):
+                    rebuilt += ''.join(cleaned[idx:])
+                return rebuilt
+
+        lines = html.splitlines()
+        filtered = [line for line in lines if not tagline_pattern.match(line)]
+        return '\n'.join(filtered) if len(filtered) != len(lines) else html
 
     def _deduplicate_greeting(self, html: str, customer_first_name: str) -> str:
         paragraphs = re.findall(r'(<p.*?>.*?</p>)', html, flags=re.IGNORECASE | re.DOTALL)
@@ -1665,7 +1616,7 @@ Generate 4 subject lines, one per line, no numbering or bullets:"""
 
 This is a mock email that would be generated for testing purposes. In a real execution, this would contain personalized content based on the customer's company information, pain points, and our product recommendations."""
 
-        return [{
+        mock_draft = {
             'draft_id': 'mock_draft_001',
             'approach': 'professional_direct',
             'tone': 'professional and direct',
@@ -1691,7 +1642,12 @@ This is a mock email that would be generated for testing purposes. In a real exe
                 'recipient_name': recipient_identity.get('full_name'),
                 'email_format': 'html'
             }
-        }]
+        }
+
+        mock_draft['priority_order'] = self._get_draft_priority_order(mock_draft)
+        mock_draft['metadata']['priority_order'] = mock_draft['priority_order']
+
+        return [mock_draft]
 
     
     def _convert_draft_to_server_format(self, draft: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
@@ -1760,24 +1716,21 @@ This is a mock email that would be generated for testing purposes. In a real exe
         return server_draft
     
     def _get_draft_priority_order(self, draft: Dict[str, Any]) -> int:
-        """Get priority order for draft based on approach and personalization score."""
-        approach_priorities = {
-            'professional_direct': 1,
-            'consultative': 2,
-            'industry_expert': 3,
-            'relationship_building': 4
-        }
-        
-        base_priority = approach_priorities.get(draft.get('approach', 'professional_direct'), 1)
-        personalization_score = draft.get('personalization_score', 50)
-        
-        # Adjust priority based on personalization score
-        if personalization_score >= 80:
-            return base_priority
-        elif personalization_score >= 60:
-            return base_priority + 1
-        else:
-            return base_priority + 2
+        """Get priority order, preferring explicit values and defaulting to 1 if absent."""
+        priority_candidates = [
+            draft.get('priority_order'),
+            (draft.get('metadata') or {}).get('priority_order')
+        ]
+
+        for candidate in priority_candidates:
+            try:
+                parsed = int(candidate)
+                if parsed >= 1:
+                    return parsed
+            except (TypeError, ValueError):
+                continue
+
+        return 1
 
     
     def _convert_draft_to_server_format(self, draft: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:
@@ -1846,24 +1799,21 @@ This is a mock email that would be generated for testing purposes. In a real exe
         return server_draft
     
     def _get_draft_priority_order(self, draft: Dict[str, Any]) -> int:
-        """Get priority order for draft based on approach and personalization score."""
-        approach_priorities = {
-            'professional_direct': 1,
-            'consultative': 2,
-            'industry_expert': 3,
-            'relationship_building': 4
-        }
-        
-        base_priority = approach_priorities.get(draft.get('approach', 'professional_direct'), 1)
-        personalization_score = draft.get('personalization_score', 50)
-        
-        # Adjust priority based on personalization score
-        if personalization_score >= 80:
-            return base_priority
-        elif personalization_score >= 60:
-            return base_priority + 1
-        else:
-            return base_priority + 2
+        """Get priority order, preferring explicit values and defaulting to 1 if absent."""
+        priority_candidates = [
+            draft.get('priority_order'),
+            (draft.get('metadata') or {}).get('priority_order')
+        ]
+
+        for candidate in priority_candidates:
+            try:
+                parsed = int(candidate)
+                if parsed >= 1:
+                    return parsed
+            except (TypeError, ValueError):
+                continue
+
+        return 1
 
     def _save_email_drafts(self, context: Dict[str, Any], email_drafts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Save email drafts to database and files."""
@@ -1889,16 +1839,17 @@ This is a mock email that would be generated for testing purposes. In a real exe
                         'metadata': json.dumps({
                             'approach': draft.get('approach', 'unknown'),
                             'tone': draft.get('tone', 'professional'),
-                            'focus': draft.get('focus', 'general'),
-                            'all_subject_lines': [draft.get('subject', '')] + draft.get('subject_alternatives', []),
-                            'call_to_action': draft.get('call_to_action', ''),
-                            'personalization_score': draft.get('personalization_score', 0),
-                            'generation_method': draft.get('metadata', {}).get('generation_method', 'llm'),
-                            'generated_at': draft.get('generated_at', datetime.now().isoformat())
-                        })
-                    }
-                    
-                    # Save to database
+                        'focus': draft.get('focus', 'general'),
+                        'all_subject_lines': [draft.get('subject', '')] + draft.get('subject_alternatives', []),
+                        'call_to_action': draft.get('call_to_action', ''),
+                        'personalization_score': draft.get('personalization_score', 0),
+                        'generation_method': draft.get('metadata', {}).get('generation_method', 'llm'),
+                        'priority_order': draft.get('priority_order'),
+                        'generated_at': draft.get('generated_at', datetime.now().isoformat())
+                    })
+                }
+                
+                # Save to database
                     if not self.is_dry_run():
                         data_manager.save_email_draft(
                             draft_id=draft_data['draft_id'],
@@ -1907,7 +1858,10 @@ This is a mock email that would be generated for testing purposes. In a real exe
                             subject=draft_data['subject'],
                             content=draft_data['content'],
                             draft_type=draft_data['draft_type'],
-                            version=draft_data['version']
+                            version=draft_data['version'],
+                            status=draft_data.get('status', 'draft'),
+                            metadata=draft_data.get('metadata'),
+                            priority_order=draft.get('priority_order', 0)
                         )
                         self.logger.info(f"Saved draft {draft['draft_id']} to database")
                     

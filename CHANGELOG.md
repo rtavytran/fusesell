@@ -2,6 +2,85 @@
 
 All notable changes to FuseSell Local will be documented in this file.
 
+# [1.3.37] - 2025-12-19
+
+### Improved
+- **Email draft rendering**: `list_drafts_compact` full-output HTML now renders all drafts with priority-first chips, clear draft labels/IDs, and a highlighted scheduled-send pill with formatted time/status so scheduled sends and selections are obvious.
+
+# [1.3.27] - 2025-12-16
+
+### Fixed
+- **URL validation now auto-prepends https:// when scheme is missing**: Updated `validate_url()` to automatically add `https://` to URLs without a scheme
+  - Now accepts `example.com` and converts to `https://example.com`
+  - Now accepts `nagen.vn` and converts to `https://nagen.vn`
+  - Fixes "Invalid input website URL" error for URLs provided without http:// or https://
+  - Users no longer need to manually add the scheme to input URLs
+
+# [1.3.26] - 2025-12-16
+
+### Fixed
+- **URL validation now supports localhost and IP addresses**: Updated `validate_url()` to accept development URLs
+  - Now accepts `localhost` (with or without port, e.g., `http://localhost:3000`)
+  - Now accepts IPv4 addresses (e.g., `http://192.168.1.1:8080`)
+  - Fixes "Invalid input website URL" error when using local development servers
+  - Prevents validation errors during testing without SERPER_API_KEY
+
+# [1.3.25] - 2025-12-16
+
+### Fixed
+- **Moved prompt customization to gs_team_initial_outreach**: Corrected the implementation to use `gs_team_initial_outreach` for natural language prompt customization instead of `gs_team_auto_interaction`
+  - `gs_team_auto_interaction` remains as a list format for email sending configurations (from_email, from_name, tool_type, etc.)
+  - `gs_team_initial_outreach` now accepts optional `customization_request` field for natural language prompt customization
+  - Prevents `AttributeError: 'list' object has no attribute 'get'` when `gs_team_auto_interaction` is passed as a list
+  - Renamed method from `process_auto_interaction_customization()` to `process_initial_outreach_customization()`
+
+# [1.3.24] - 2025-12-16
+
+### Added
+- **Two-tier Configuration System**: Implemented intelligent configuration management for all config files
+  - **Default configs packaged with fusesell**:
+    - `fusesell_local/config/default_prompts.json` - Email generation prompts
+    - `fusesell_local/config/default_scoring_criteria.json` - Lead scoring rules
+    - `fusesell_local/config/default_email_templates.json` - Email templates
+  - **Custom configs** stored in user's data directory at `data_dir/config/`
+  - Custom configs automatically override defaults when present
+  - Graceful fallback to defaults if custom configs don't exist
+- **Natural Language Prompt Customization**: Users can now customize email generation prompts using natural language
+  - Added `generate_custom_prompt()` method in `LocalDataManager` to convert natural language to custom prompts
+  - Added `save_custom_prompt()` method to persist custom prompts
+  - Added `process_initial_outreach_customization()` to handle customization requests *(Initially named process_auto_interaction_customization, corrected in 1.3.25)*
+  - Added generic `_load_default_config()` method for loading any default config from package
+- **Flexible `gs_team_initial_outreach` Schema**: Configuration now supports natural language customization requests *(Note: Initially implemented in gs_team_auto_interaction, corrected in 1.3.25)*
+  - `customization_request` field triggers automatic custom prompt generation
+  - Required fields (like 'tone') always preserved while allowing flexible additional fields
+  - `gs_team_auto_interaction` remains as a list for email sending configurations
+
+### Changed
+- `load_prompts()` now merges default and custom prompts with custom taking precedence
+- `load_scoring_criteria()` now merges default and custom criteria with custom taking precedence
+- `load_email_templates()` now merges default and custom templates with custom taking precedence
+- `save_team_settings()` now accepts optional `llm_client` parameter for custom prompt generation
+- `get_prompt_template()` now automatically prioritizes custom prompts over defaults
+- Updated `pyproject.toml` to include all default config files in package data
+- Refactored config loading to use shared `_load_default_config()` method
+
+### Fixed
+- Users installing fusesell will now have default configs available immediately without manual setup
+- Package now works out-of-the-box with sensible defaults for all configurations
+
+# [1.3.23] - 2025-12-16
+
+### Changed
+- Email drafts now persist `priority_order` into the SQLite table (with backfill for existing rows) so priorities are visible in stored records.
+- Added metadata/status columns and migration for `email_drafts`, aligning storage with draft objects.
+- Follow-up drafts sanitize taglines below greetings and carry priority through save/persistence paths.
+
+# [1.3.22] - 2025-12-16
+
+### Changed
+- Email drafts now carry an explicit `priority_order` so the chosen scheduled draft is obvious in summaries and reminders.
+- Tagline rows under the greeting are stripped from generated draft bodies to keep outbound content clean.
+
 # [1.3.21] - 2025-12-15
 
 ### Changed

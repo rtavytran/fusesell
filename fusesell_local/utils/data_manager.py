@@ -116,6 +116,7 @@ class LocalDataManager:
                         self.logger.debug(f"Database exists, found tables: {existing_tables}")
                         
                         if len(existing_tables) >= 3:
+                            self._migrate_email_drafts_table(cursor)
                             self.logger.info("Database already initialized, skipping full initialization")
                             LocalDataManager._initialized_databases.add(db_path_str)
                             return
@@ -214,7 +215,11 @@ class LocalDataManager:
                         content TEXT,
                         draft_type TEXT,
                         version INTEGER DEFAULT 1,
+                        status TEXT DEFAULT 'draft',
+                        metadata TEXT,
+                        priority_order INTEGER DEFAULT 0,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         FOREIGN KEY (execution_id) REFERENCES executions(execution_id)
                     )
                 """)
@@ -678,6 +683,9 @@ class LocalDataManager:
                     FROM llm_worker_operation
                 """)
 
+                # Ensure email_drafts table has latest columns
+                self._migrate_email_drafts_table(cursor)
+
                 conn.commit()
 
                 # Initialize default data for new tables
@@ -688,6 +696,58 @@ class LocalDataManager:
         except Exception as e:
             self.logger.error(f"Failed to initialize database: {str(e)}")
             raise
+
+    def _migrate_email_drafts_table(self, cursor: sqlite3.Cursor) -> None:
+        """
+        Ensure email_drafts table has expected columns for metadata and priority.
+
+        Args:
+            cursor: Active database cursor
+        """
+        try:
+            cursor.execute("PRAGMA table_info(email_drafts)")
+            columns = {row[1] for row in cursor.fetchall()}
+
+            if "status" not in columns:
+                cursor.execute("ALTER TABLE email_drafts ADD COLUMN status TEXT DEFAULT 'draft'")
+            if "metadata" not in columns:
+                cursor.execute("ALTER TABLE email_drafts ADD COLUMN metadata TEXT")
+            if "priority_order" not in columns:
+                cursor.execute("ALTER TABLE email_drafts ADD COLUMN priority_order INTEGER DEFAULT 0")
+            if "updated_at" not in columns:
+                try:
+                    cursor.execute("ALTER TABLE email_drafts ADD COLUMN updated_at TIMESTAMP")
+                    cursor.execute(
+                        "UPDATE email_drafts SET updated_at = CURRENT_TIMESTAMP WHERE updated_at IS NULL"
+                    )
+                except Exception as exc:
+                    self.logger.debug(f"Updated_at column add skipped: {exc}")
+
+            try:
+                cursor.execute(
+                    """
+                    WITH ordered AS (
+                        SELECT draft_id,
+                               ROW_NUMBER() OVER (PARTITION BY execution_id ORDER BY created_at, draft_id) AS rn
+                        FROM email_drafts
+                        WHERE IFNULL(priority_order, 0) <= 0
+                    )
+                    UPDATE email_drafts
+                    SET priority_order = (
+                        SELECT rn FROM ordered WHERE ordered.draft_id = email_drafts.draft_id
+                    )
+                    WHERE draft_id IN (SELECT draft_id FROM ordered)
+                    """
+                )
+            except Exception as exc:
+                self.logger.debug(f"Priority backfill skipped: {exc}")
+
+            try:
+                cursor.connection.commit()
+            except Exception:
+                pass
+        except Exception as exc:
+            self.logger.warning(f"Email drafts table migration skipped/failed: {exc}")
 
     def save_execution(
         self,
@@ -964,34 +1024,71 @@ class LocalDataManager:
 
     def save_email_draft(
         self,
-        draft_id: str,
-        execution_id: str,
-        customer_id: str,
-        subject: str,
-        content: str,
+        draft_id: Union[str, Dict[str, Any]],
+        execution_id: Optional[str] = None,
+        customer_id: Optional[str] = None,
+        subject: Optional[str] = None,
+        content: Optional[str] = None,
         draft_type: str = "initial_outreach",
-        version: int = 1
+        version: int = 1,
+        status: str = "draft",
+        metadata: Optional[Union[Dict[str, Any], str]] = None,
+        priority_order: int = 0
     ) -> None:
         """
-        Save email draft.
+        Save email draft. Accepts either explicit parameters or a draft data dictionary.
 
         Args:
-            draft_id: Draft identifier
+            draft_id: Draft identifier or draft dictionary with keys
             execution_id: Execution identifier
             customer_id: Customer identifier
             subject: Email subject
             content: Email content
             draft_type: Type of draft (initial_outreach, follow_up)
             version: Draft version number
+            status: Draft status
+            metadata: Additional metadata (dict or JSON string)
+            priority_order: Numeric priority for scheduling/selection
         """
         try:
+            if isinstance(draft_id, dict):
+                data = draft_id
+                draft_id = data.get("draft_id")
+                execution_id = data.get("execution_id")
+                customer_id = data.get("customer_id")
+                subject = data.get("subject")
+                content = data.get("content")
+                draft_type = data.get("draft_type", draft_type)
+                version = data.get("version", version)
+                status = data.get("status", status)
+                metadata = data.get("metadata")
+                priority_order = data.get("priority_order", priority_order)
+
+            metadata_json = metadata
+            if isinstance(metadata, dict):
+                metadata_json = json.dumps(metadata)
+
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute("""
+                cursor.execute(
+                    """
                     INSERT INTO email_drafts 
-                    (draft_id, execution_id, customer_id, subject, content, draft_type, version)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (draft_id, execution_id, customer_id, subject, content, draft_type, version))
+                    (draft_id, execution_id, customer_id, subject, content, draft_type, version, status, metadata, priority_order)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        draft_id,
+                        execution_id,
+                        customer_id,
+                        subject,
+                        content,
+                        draft_type,
+                        version,
+                        status,
+                        metadata_json,
+                        priority_order or 0,
+                    ),
+                )
                 conn.commit()
                 self.logger.debug(f"Saved email draft: {draft_id}")
 
@@ -1069,33 +1166,68 @@ class LocalDataManager:
     def load_prompts(self) -> Dict[str, Any]:
         """
         Load prompt templates from configuration.
+        Priority: custom prompts (data_dir/config/prompts.json) > default prompts (package)
 
         Returns:
             Dictionary of prompt templates
         """
         try:
-            prompts_file = self.config_dir / "prompts.json"
-            if prompts_file.exists():
-                with open(prompts_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            return {}
+            # Load default prompts from package
+            default_prompts = self._load_default_prompts()
+
+            # Load custom prompts from user's data directory
+            custom_prompts_file = self.config_dir / "prompts.json"
+            custom_prompts = {}
+            if custom_prompts_file.exists():
+                with open(custom_prompts_file, 'r', encoding='utf-8') as f:
+                    custom_prompts = json.load(f)
+                    self.logger.debug(f"Loaded custom prompts from {custom_prompts_file}")
+
+            # Merge prompts - custom overrides default
+            merged_prompts = default_prompts.copy()
+            for stage_name, stage_prompts in custom_prompts.items():
+                if stage_name in merged_prompts:
+                    merged_prompts[stage_name].update(stage_prompts)
+                else:
+                    merged_prompts[stage_name] = stage_prompts
+
+            return merged_prompts
         except Exception as e:
             self.logger.error(f"Failed to load prompts: {str(e)}")
             return {}
 
+    def _load_default_prompts(self) -> Dict[str, Any]:
+        """
+        Load default system prompts from package.
+
+        Returns:
+            Dictionary of default prompt templates
+        """
+        return self._load_default_config('default_prompts.json')
+
     def load_scoring_criteria(self) -> Dict[str, Any]:
         """
         Load scoring criteria configuration.
+        Priority: custom criteria (data_dir/config/scoring_criteria.json) > default criteria (package)
 
         Returns:
             Dictionary of scoring criteria
         """
         try:
-            criteria_file = self.config_dir / "scoring_criteria.json"
-            if criteria_file.exists():
-                with open(criteria_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            return {}
+            # Load default criteria from package
+            default_criteria = self._load_default_config('default_scoring_criteria.json')
+
+            # Load custom criteria from user's data directory
+            custom_criteria_file = self.config_dir / "scoring_criteria.json"
+            if custom_criteria_file.exists():
+                with open(custom_criteria_file, 'r', encoding='utf-8') as f:
+                    custom_criteria = json.load(f)
+                    # Merge custom with default (custom overrides)
+                    merged = default_criteria.copy()
+                    merged.update(custom_criteria)
+                    return merged
+
+            return default_criteria
         except Exception as e:
             self.logger.error(f"Failed to load scoring criteria: {str(e)}")
             return {}
@@ -1103,19 +1235,238 @@ class LocalDataManager:
     def load_email_templates(self) -> Dict[str, Any]:
         """
         Load email templates configuration.
+        Priority: custom templates (data_dir/config/email_templates.json) > default templates (package)
 
         Returns:
             Dictionary of email templates
         """
         try:
-            templates_file = self.config_dir / "email_templates.json"
-            if templates_file.exists():
-                with open(templates_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            return {}
+            # Load default templates from package
+            default_templates = self._load_default_config('default_email_templates.json')
+
+            # Load custom templates from user's data directory
+            custom_templates_file = self.config_dir / "email_templates.json"
+            if custom_templates_file.exists():
+                with open(custom_templates_file, 'r', encoding='utf-8') as f:
+                    custom_templates = json.load(f)
+                    # Merge custom with default (custom overrides)
+                    merged = default_templates.copy()
+                    merged.update(custom_templates)
+                    return merged
+
+            return default_templates
         except Exception as e:
             self.logger.error(f"Failed to load email templates: {str(e)}")
             return {}
+
+    def _load_default_config(self, filename: str) -> Dict[str, Any]:
+        """
+        Load default configuration file from package.
+
+        Args:
+            filename: Name of the config file (e.g., 'default_prompts.json')
+
+        Returns:
+            Dictionary of configuration data
+        """
+        try:
+            import importlib.resources as pkg_resources
+            from pathlib import Path
+
+            # Try to load from package resources
+            try:
+                # Python 3.9+
+                with pkg_resources.files('fusesell_local.config').joinpath(filename).open('r', encoding='utf-8') as f:
+                    return json.load(f)
+            except AttributeError:
+                # Python 3.8 fallback
+                with pkg_resources.open_text('fusesell_local.config', filename, encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            self.logger.warning(f"Failed to load default config {filename} from package: {str(e)}")
+            # Fallback: try to load from installed location
+            try:
+                import fusesell_local
+                package_dir = Path(fusesell_local.__file__).parent
+                default_config_file = package_dir / "config" / filename
+                if default_config_file.exists():
+                    with open(default_config_file, 'r', encoding='utf-8') as f:
+                        return json.load(f)
+            except Exception as fallback_error:
+                self.logger.warning(f"Fallback load also failed for {filename}: {str(fallback_error)}")
+
+            return {}
+
+    def generate_custom_prompt(
+        self,
+        stage_name: str,
+        prompt_key: str,
+        user_request: str,
+        llm_client: Any = None,
+        required_fields: Optional[List[str]] = None
+    ) -> str:
+        """
+        Generate a custom prompt based on user's natural language request.
+
+        Args:
+            stage_name: The stage name (e.g., 'initial_outreach', 'follow_up')
+            prompt_key: The prompt key (e.g., 'email_generation')
+            user_request: User's natural language customization request
+            llm_client: LLM client instance for generating the prompt
+            required_fields: List of required fields that must always exist in the prompt
+
+        Returns:
+            Generated custom prompt string
+        """
+        if not llm_client:
+            raise ValueError("LLM client is required for custom prompt generation")
+
+        # Load default prompt as base
+        default_prompts = self._load_default_prompts()
+        default_prompt = default_prompts.get(stage_name, {}).get(prompt_key, "")
+
+        if not default_prompt:
+            self.logger.warning(f"No default prompt found for {stage_name}.{prompt_key}")
+            default_prompt = ""
+
+        # Build required fields context
+        required_fields_str = ""
+        if required_fields:
+            required_fields_str = f"\n\nRequired fields that MUST be present in the prompt: {', '.join(required_fields)}"
+
+        # Generate custom prompt using LLM
+        system_prompt = f"""You are an expert at creating email generation prompts for sales automation systems.
+Your task is to modify the default system prompt based on the user's customization request.
+
+IMPORTANT RULES:
+1. Preserve all placeholder variables (##variable_name##) from the original prompt
+2. Maintain the JSON output structure requirements
+3. Keep essential instructions about email formatting and validation
+4. Incorporate the user's customization request naturally{required_fields_str}
+5. Return ONLY the modified prompt text, no explanations or markdown formatting
+6. The output should be a complete, standalone prompt that can be used directly"""
+
+        user_prompt = f"""Default System Prompt:
+{default_prompt}
+
+User's Customization Request:
+{user_request}
+
+Generate the modified prompt that incorporates the user's request while maintaining all critical elements."""
+
+        try:
+            response = llm_client.chat_completion(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.3,
+                max_tokens=4000
+            )
+
+            return response.strip()
+
+        except Exception as e:
+            self.logger.error(f"Failed to generate custom prompt: {str(e)}")
+            raise
+
+    def save_custom_prompt(
+        self,
+        stage_name: str,
+        prompt_key: str,
+        custom_prompt: str
+    ) -> None:
+        """
+        Save custom prompt to user's data directory.
+
+        Args:
+            stage_name: The stage name (e.g., 'initial_outreach', 'follow_up')
+            prompt_key: The prompt key (e.g., 'email_generation')
+            custom_prompt: The custom prompt to save
+        """
+        try:
+            custom_prompts_file = self.config_dir / "prompts.json"
+
+            # Load existing custom prompts
+            existing_prompts = {}
+            if custom_prompts_file.exists():
+                with open(custom_prompts_file, 'r', encoding='utf-8') as f:
+                    existing_prompts = json.load(f)
+
+            # Update with new custom prompt
+            if stage_name not in existing_prompts:
+                existing_prompts[stage_name] = {}
+            existing_prompts[stage_name][prompt_key] = custom_prompt
+
+            # Save back to file
+            with open(custom_prompts_file, 'w', encoding='utf-8') as f:
+                json.dump(existing_prompts, f, indent=2, ensure_ascii=False)
+
+            self.logger.info(f"Saved custom prompt for {stage_name}.{prompt_key}")
+
+        except Exception as e:
+            self.logger.error(f"Failed to save custom prompt: {str(e)}")
+            raise
+
+    def process_initial_outreach_customization(
+        self,
+        initial_outreach_config: Dict[str, Any],
+        llm_client: Any = None
+    ) -> Dict[str, Any]:
+        """
+        Process initial_outreach configuration and generate custom prompts if requested.
+
+        Args:
+            initial_outreach_config: Initial outreach configuration with optional customization_request
+            llm_client: LLM client for generating custom prompts
+
+        Returns:
+            Processed initial_outreach configuration
+        """
+        if not initial_outreach_config:
+            return {}
+
+        # Required fields that should always exist
+        required_fields = ['tone']
+
+        # Extract customization request if present
+        customization_request = initial_outreach_config.get('customization_request')
+
+        if customization_request and llm_client:
+            try:
+                # Generate custom prompt for initial_outreach stage
+                custom_prompt = self.generate_custom_prompt(
+                    stage_name='initial_outreach',
+                    prompt_key='email_generation',
+                    user_request=customization_request,
+                    llm_client=llm_client,
+                    required_fields=required_fields
+                )
+
+                # Save the custom prompt
+                self.save_custom_prompt(
+                    stage_name='initial_outreach',
+                    prompt_key='email_generation',
+                    custom_prompt=custom_prompt
+                )
+
+                self.logger.info("Generated and saved custom prompt for initial_outreach")
+
+            except Exception as e:
+                self.logger.error(f"Failed to process customization request: {str(e)}")
+                # Don't fail the entire save operation, just log the error
+
+        # Build the processed configuration (keep all fields except customization_request)
+        processed_config = {}
+        for key, value in initial_outreach_config.items():
+            if key != 'customization_request':
+                processed_config[key] = value
+
+        # Ensure tone field exists
+        if 'tone' not in processed_config:
+            processed_config['tone'] = 'Professional'
+
+        return processed_config
 
     def _generate_customer_id(self) -> str:
         """Generate unique customer ID."""
@@ -1404,7 +1755,8 @@ class LocalDataManager:
         gs_team_follow_up: Optional[Dict[str, Any]] = None,
         gs_team_auto_interaction: Optional[Dict[str, Any]] = None,
         gs_team_followup_schedule_time: Optional[Dict[str, Any]] = None,
-        gs_team_birthday_email: Optional[Dict[str, Any]] = None
+        gs_team_birthday_email: Optional[Dict[str, Any]] = None,
+        llm_client: Any = None
     ) -> None:
         """
         Save or update team settings.
@@ -1420,12 +1772,28 @@ class LocalDataManager:
             gs_team_schedule_time: Scheduling configuration
             gs_team_initial_outreach: Initial outreach configuration
             gs_team_follow_up: Follow-up configuration
-            gs_team_auto_interaction: Auto interaction rules
+            gs_team_auto_interaction: Auto interaction rules (can include customization_request)
             gs_team_followup_schedule_time: Follow-up scheduling rules
             gs_team_birthday_email: Birthday email configuration
+            llm_client: Optional LLM client for custom prompt generation
         """
         try:
             settings_id = f"{team_id}_{org_id}"
+
+            # Process initial_outreach customization if present
+            processed_initial_outreach = gs_team_initial_outreach
+            if gs_team_initial_outreach and isinstance(gs_team_initial_outreach, dict):
+                if gs_team_initial_outreach.get('customization_request'):
+                    try:
+                        processed_initial_outreach = self.process_initial_outreach_customization(
+                            gs_team_initial_outreach,
+                            llm_client=llm_client
+                        )
+                        self.logger.info("Processed initial_outreach customization request")
+                    except Exception as e:
+                        self.logger.warning(f"Failed to process initial_outreach customization: {str(e)}")
+                        # Continue with original config if processing fails
+                        processed_initial_outreach = gs_team_initial_outreach
 
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
@@ -1456,7 +1824,7 @@ class LocalDataManager:
                         json.dumps(
                             gs_team_schedule_time) if gs_team_schedule_time else None,
                         json.dumps(
-                            gs_team_initial_outreach) if gs_team_initial_outreach else None,
+                            processed_initial_outreach) if processed_initial_outreach else None,
                         json.dumps(
                             gs_team_follow_up) if gs_team_follow_up else None,
                         json.dumps(
@@ -1486,7 +1854,7 @@ class LocalDataManager:
                         json.dumps(
                             gs_team_schedule_time) if gs_team_schedule_time else None,
                         json.dumps(
-                            gs_team_initial_outreach) if gs_team_initial_outreach else None,
+                            processed_initial_outreach) if processed_initial_outreach else None,
                         json.dumps(
                             gs_team_follow_up) if gs_team_follow_up else None,
                         json.dumps(
@@ -2585,7 +2953,7 @@ class LocalDataManager:
                                 'industry_expert',
                                 'relationship_building'
                             ],
-                            'subject_line_variations': 4
+                            'subject_line_variations': 1
                         }),
                         'gs_team_follow_up': json.dumps({
                             'max_follow_ups': 5,
@@ -3162,7 +3530,7 @@ class LocalDataManager:
 
                     # Get email drafts
                     cursor.execute("""
-                        SELECT draft_id, subject, content, draft_type, created_at
+                        SELECT draft_id, subject, content, draft_type, priority_order, created_at
                         FROM email_drafts 
                         WHERE execution_id = ?
                     """, (task_id,))
@@ -3174,7 +3542,8 @@ class LocalDataManager:
                             # Truncate content
                             'content': row[2][:200] + '...' if len(row[2]) > 200 else row[2],
                             'draft_type': row[3],
-                            'created_at': row[4]
+                            'priority_order': row[4],
+                            'created_at': row[5]
                         })
 
             except Exception as e:
