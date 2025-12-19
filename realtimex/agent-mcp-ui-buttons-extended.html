@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FuseSell Quick Actions (Extended)</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; }
+        .quick-action-btn:active { transform: scale(0.98); }
+        .button-grid {
+            display: grid !important;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)) !important;
+            gap: 0.5rem !important;
+        }
+        /* Tailwind-like utilities for compact styling */
+        .bg-blue-50 { background-color: #eff6ff; }
+        .bg-green-50 { background-color: #ecfdf3; }
+        .bg-yellow-50 { background-color: #fffbeb; }
+        .border-blue-200 { border-color: #bfdbfe; }
+        .border-green-200 { border-color: #bbf7d0; }
+        .border-yellow-200 { border-color: #fef08a; }
+        .hover\:bg-blue-100:hover { background-color: #dbeafe; }
+        .hover\:bg-green-100:hover { background-color: #d1fae5; }
+        .hover\:bg-yellow-100:hover { background-color: #fef3c7; }
+        .border { border-width: 1px; border-style: solid; }
+        .rounded-md { border-radius: 0.375rem; }
+        .p-2 { padding: 0.5rem; }
+        .text-left { text-align: left; }
+        .transition-all { transition-property: all; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 200ms; }
+        .hover\:shadow-sm:hover { box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05); }
+        .w-full { width: 100%; }
+        .flex { display: flex; }
+        .items-center { align-items: center; }
+        .justify-between { justify-content: space-between; }
+        .gap-2 { gap: 0.5rem; }
+        .text-gray-700 { color: #374151; }
+        .text-sm { font-size: 0.875rem; line-height: 1.25rem; }
+        .text-xs { font-size: 0.75rem; line-height: 1rem; }
+        .font-medium { font-weight: 500; }
+        .text-gray-900 { color: #111827; }
+        .text-gray-400 { color: #9ca3af; }
+        .text-green-600 { color: #16a34a; }
+        .font-sans { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+    </style>
+    <script>
+        function sendPrompt(button, text) {
+            // Send to parent (RealtimeX MCP-UI)
+            const messageId = 'remote-dom-prompt-' + Date.now();
+            window.parent.postMessage({
+                type: 'prompt',
+                payload: { prompt: text },
+                messageId
+            }, '*');
+
+            // Visual feedback
+            const originalHTML = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-check text-green-600"></i> <span class="text-green-600">Sent!</span>';
+            button.disabled = true;
+
+            setTimeout(() => {
+                button.innerHTML = originalHTML;
+                button.disabled = false;
+            }, 1500);
+
+            console.log(`Message sent to parent window: Type='prompt', ID='${messageId}'`);
+            console.log('Payload:', { prompt: text });
+        }
+    </script>
+</head>
+
+<body class="font-sans" style="background: transparent; padding: 4px; margin: 0;">
+    <div class="button-grid">
+        <button onclick="sendPrompt(this, '@FS-Workspace-Dashboard')" class="quick-action-btn bg-blue-50 border-blue-200 hover:bg-blue-100 border rounded-md p-2 text-left transition-all duration-200 hover:shadow-sm w-full">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-chart-line text-gray-700 text-sm"></i>
+                    <span class="text-xs font-medium text-gray-900">Dashboard</span>
+                </div>
+                <i class="fas fa-paper-plane text-gray-400 text-xs"></i>
+            </div>
+        </button>
+
+        <button onclick="sendPrompt(this, '@Fusesell-KnowledgeProvider provide the onboarding checklist')" class="quick-action-btn bg-blue-50 border-blue-200 hover:bg-blue-100 border rounded-md p-2 text-left transition-all duration-200 hover:shadow-sm w-full">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-tasks text-gray-700 text-sm"></i>
+                    <span class="text-xs font-medium text-gray-900">Onboarding Checklist</span>
+                </div>
+                <i class="fas fa-paper-plane text-gray-400 text-xs"></i>
+            </div>
+        </button>
+
+        <button onclick="sendPrompt(this, 'Create a product.')" class="quick-action-btn bg-green-50 border-green-200 hover:bg-green-100 border rounded-md p-2 text-left transition-all duration-200 hover:shadow-sm w-full">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-box text-gray-700 text-sm"></i>
+                    <span class="text-xs font-medium text-gray-900">Create Product</span>
+                </div>
+                <i class="fas fa-paper-plane text-gray-400 text-xs"></i>
+            </div>
+        </button>
+
+        <button onclick="sendPrompt(this, 'Update Sales Settings (product link).')" class="quick-action-btn bg-green-50 border-green-200 hover:bg-green-100 border rounded-md p-2 text-left transition-all duration-200 hover:shadow-sm w-full">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-link text-gray-700 text-sm"></i>
+                    <span class="text-xs font-medium text-gray-900">Link Products</span>
+                </div>
+                <i class="fas fa-paper-plane text-gray-400 text-xs"></i>
+            </div>
+        </button>
+
+        <button onclick="sendPrompt(this, 'Update Sales Settings (org profile).')" class="quick-action-btn bg-yellow-50 border-yellow-200 hover:bg-yellow-100 border rounded-md p-2 text-left transition-all duration-200 hover:shadow-sm w-full">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-building text-gray-700 text-sm"></i>
+                    <span class="text-xs font-medium text-gray-900">Org Profile</span>
+                </div>
+                <i class="fas fa-paper-plane text-gray-400 text-xs"></i>
+            </div>
+        </button>
+
+        <button onclick="sendPrompt(this, 'Update Sales Settings (sales representative).')" class="quick-action-btn bg-yellow-50 border-yellow-200 hover:bg-yellow-100 border rounded-md p-2 text-left transition-all duration-200 hover:shadow-sm w-full">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-user-tie text-gray-700 text-sm"></i>
+                    <span class="text-xs font-medium text-gray-900">Add Sales Rep</span>
+                </div>
+                <i class="fas fa-paper-plane text-gray-400 text-xs"></i>
+            </div>
+        </button>
+
+        <button onclick="sendPrompt(this, 'Update Sales Settings (auto interaction).')" class="quick-action-btn bg-yellow-50 border-yellow-200 hover:bg-yellow-100 border rounded-md p-2 text-left transition-all duration-200 hover:shadow-sm w-full">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-robot text-gray-700 text-sm"></i>
+                    <span class="text-xs font-medium text-gray-900">Email Automation</span>
+                </div>
+                <i class="fas fa-paper-plane text-gray-400 text-xs"></i>
+            </div>
+        </button>
+
+        <button onclick="sendPrompt(this, 'Start a sales process.')" class="quick-action-btn bg-blue-50 border-blue-200 hover:bg-blue-100 border rounded-md p-2 text-left transition-all duration-200 hover:shadow-sm w-full">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-rocket text-gray-700 text-sm"></i>
+                    <span class="text-xs font-medium text-gray-900">Start Sales Process</span>
+                </div>
+                <i class="fas fa-paper-plane text-gray-400 text-xs"></i>
+            </div>
+        </button>
+
+        <button onclick="sendPrompt(this, 'Query sales processes.')" class="quick-action-btn bg-blue-50 border-blue-200 hover:bg-blue-100 border rounded-md p-2 text-left transition-all duration-200 hover:shadow-sm w-full">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-search text-gray-700 text-sm"></i>
+                    <span class="text-xs font-medium text-gray-900">Query Processes</span>
+                </div>
+                <i class="fas fa-paper-plane text-gray-400 text-xs"></i>
+            </div>
+        </button>
+
+        <button onclick="sendPrompt(this, '@Fusesell-KnowledgeProvider focus=sales_settings')" class="quick-action-btn bg-blue-50 border-blue-200 hover:bg-blue-100 border rounded-md p-2 text-left transition-all duration-200 hover:shadow-sm w-full">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <i class="fas fa-book text-gray-700 text-sm"></i>
+                    <span class="text-xs font-medium text-gray-900">Setup Templates</span>
+                </div>
+                <i class="fas fa-paper-plane text-gray-400 text-xs"></i>
+            </div>
+        </button>
+    </div>
+</body>
+</html>
