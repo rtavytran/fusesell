@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FuseSell Draft Actions</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+:root {
+    --border: #e5e7eb;
+    --text: #0f172a;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent-soft: #eff6ff;
+}
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    padding: 6px 0;
+    background: transparent;
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    color: var(--text);
+}
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 10px;
+}
+.quick-action-btn {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    background: linear-gradient(135deg, #ffffff, #f8fafc);
+    text-align: left;
+    cursor: pointer;
+    transition: transform 120ms ease, box-shadow 180ms ease, border-color 180ms ease;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
+    position: relative;
+}
+.quick-action-btn:hover {
+    transform: translateY(-1px);
+    border-color: #cbd5e1;
+    box-shadow: 0 8px 20px rgba(37, 99, 235, 0.12);
+}
+.quick-action-btn:active { transform: scale(0.98); }
+.quick-action-btn .title {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+}
+.quick-action-btn .icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+.quick-action-btn .meta {
+    margin-top: 2px;
+    display: block;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.3;
+}
+.section-title {
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 4px 0 8px 0;
+}
+.notes {
+    width: 100%;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 13px;
+    color: var(--text);
+    background: #fff;
+}
+.notes-panel {
+    margin-bottom: 10px;
+}
+.notes-panel.hidden {
+    display: none;
+}
+.notes-toggle {
+    margin-bottom: 6px;
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #fff;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.notes-toggle:hover {
+    border-color: #cbd5e1;
+}
+.toggle-icon {
+    font-size: 11px;
+}
+.draft-selector {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    background: #fff;
+}
+.select-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.draft-select {
+    flex: 1;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-size: 12px;
+    color: var(--text);
+    background: #fff;
+}
+.use-draft-btn {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 12px;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.use-draft-btn:hover {
+    border-color: #cbd5e1;
+}
+.use-draft-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+    background: #f8fafc;
+    color: var(--muted);
+}
+    </style>
+    <script>
+        function sendPrompt(button, overridePrompt) {
+            const base = overridePrompt || button.getAttribute('data-prompt') || '';
+            const notes = (document.getElementById('notes')?.value || '').trim();
+            const promptText = notes ? `${base} | ${notes}` : base;
+            if (!promptText) return;
+            const messageId = 'remote-dom-prompt-' + Date.now();
+            window.parent.postMessage({
+                type: 'prompt',
+                payload: { prompt: promptText },
+                messageId
+            }, '*');
+            const originalHTML = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-check text-green-600"></i> <span class="text-green-600">Sent</span>';
+            button.disabled = true;
+            setTimeout(() => {
+                button.innerHTML = originalHTML;
+                button.disabled = false;
+            }, 2000);
+        }
+
+        function hideMissingDraftButtons() {
+            document.querySelectorAll('.quick-action-btn[data-draft-id]').forEach(btn => {
+                const draftId = (btn.getAttribute('data-draft-id') || '').trim();
+                const unresolved = draftId.includes('{{');
+                const lower = draftId.toLowerCase();
+                const missing = !draftId || lower === 'undefined' || lower === 'null';
+                if (missing || unresolved) {
+                    btn.classList.add('draft-missing');
+                    btn.style.display = 'none';
+                }
+            });
+        }
+
+        function pruneDraftOptions() {
+            const select = document.getElementById('draft-select');
+            if (!select) {
+                return;
+            }
+            select.querySelectorAll('option[data-draft-id]').forEach(option => {
+                const draftId = (option.getAttribute('data-draft-id') || '').trim();
+                const unresolved = draftId.includes('{{');
+                const lower = draftId.toLowerCase();
+                const missing = !draftId || lower === 'undefined' || lower === 'null';
+                if (missing || unresolved) {
+                    option.remove();
+                }
+            });
+            const selector = document.getElementById('draft-selector');
+            const hasOptions = select.querySelectorAll('option[data-draft-id]').length > 0;
+            if (selector) {
+                selector.style.display = hasOptions ? '' : 'none';
+            }
+        }
+
+        function getSelectedDraftPrompt() {
+            const select = document.getElementById('draft-select');
+            if (!select) {
+                return '';
+            }
+            const draftId = (select.value || '').trim();
+            if (!draftId) {
+                return '';
+            }
+            return `@FS-EmailDraft-Update Change selected draft to ${draftId}`;
+        }
+
+        function updateDraftSelectState() {
+            const select = document.getElementById('draft-select');
+            const button = document.getElementById('use-selected-draft');
+            if (!select || !button) {
+                return;
+            }
+            button.disabled = !select.value;
+        }
+
+        function setNotesVisible(show) {
+            const panel = document.getElementById('notes-panel');
+            const toggle = document.getElementById('toggle-notes');
+            if (!panel || !toggle) {
+                return;
+            }
+            panel.classList.toggle('hidden', !show);
+            toggle.setAttribute('aria-expanded', show ? 'true' : 'false');
+            const label = toggle.querySelector('.toggle-label');
+            if (label) {
+                label.textContent = show ? 'Hide notes' : 'Add notes';
+            }
+            const icon = toggle.querySelector('.toggle-icon');
+            if (icon) {
+                icon.classList.toggle('fa-plus', !show);
+                icon.classList.toggle('fa-minus', show);
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            document.querySelectorAll('.quick-action-btn').forEach(btn => {
+                btn.setAttribute('data-original', btn.innerHTML);
+            });
+            hideMissingDraftButtons();
+            pruneDraftOptions();
+            updateDraftSelectState();
+
+            const select = document.getElementById('draft-select');
+            const button = document.getElementById('use-selected-draft');
+            if (select) {
+                select.addEventListener('change', updateDraftSelectState);
+            }
+            if (button) {
+                button.addEventListener('click', () => {
+                    const prompt = getSelectedDraftPrompt();
+                    if (!prompt) {
+                        return;
+                    }
+                    sendPrompt(button, prompt);
+                });
+            }
+
+            const notesInput = document.getElementById('notes');
+            const notesToggle = document.getElementById('toggle-notes');
+            const hasNotes = (notesInput?.value || '').trim().length > 0;
+            setNotesVisible(hasNotes);
+            if (notesToggle) {
+                notesToggle.addEventListener('click', () => {
+                    const expanded = notesToggle.getAttribute('aria-expanded') === 'true';
+                    setNotesVisible(!expanded);
+                });
+            }
+        });
+
+        const resizeObserver = new ResizeObserver((entries) => {
+            entries.forEach((entry) => {
+                window.parent.postMessage(
+                    {
+                        type: "ui-size-change",
+                        payload: {
+                            height: entry.contentRect.height,
+                        },
+                    },
+                    "*",
+                );
+            });
+        });
+
+        resizeObserver.observe(document.documentElement);
+    </script>
+</head>
+<body>
+    <button
+        type="button"
+        class="notes-toggle"
+        id="toggle-notes"
+        aria-expanded="false"
+        aria-controls="notes-panel"
+    >
+        <i class="fas fa-plus toggle-icon" aria-hidden="true"></i>
+        <span class="toggle-label">Add notes</span>
+    </button>
+    <div id="notes-panel" class="notes-panel hidden">
+        <div class="section-title">Optional Notes</div>
+        <textarea id="notes" class="notes" rows="2" placeholder="Add instructions or edits to include in the prompt"></textarea>
+    </div>
+
+    <div class="section-title">Draft Actions</div>
+    <div class="grid">
+        <button
+            class="quick-action-btn"
+            data-draft-id='{{ jsonPath($draft_data, "fields.drafts[0].draft_id") }}'
+            data-prompt='@FS-EmailDraft-Update rewrite draft {{ jsonPath($draft_data, "fields.drafts[0].draft_id") }} | manual update {{ jsonPath($draft_data, "fields.drafts[0].draft_id") }}'
+            onclick="sendPrompt(this)"
+            aria-label="Rewrite selected draft"
+        >
+            <div class="title">
+                <span class="icon"><i class="fas fa-pen"></i></span>
+                <span class="title-text">
+                    <span>Rewrite selected draft</span>
+                </span>
+            </div>
+        </button>
+
+        <button
+            class="quick-action-btn"
+            data-draft-id='{{ jsonPath($draft_data, "fields.drafts[0].draft_id") }}'
+            data-prompt='@FS-EmailDraft-Update manual update {{ jsonPath($draft_data, "fields.drafts[0].draft_id") }}'
+            onclick="sendPrompt(this)"
+            aria-label="Manual edit selected draft"
+        >
+            <div class="title">
+                <span class="icon"><i class="fas fa-edit"></i></span>
+                <span class="title-text">
+                    <span>Manual edit selected draft</span>
+                </span>
+            </div>
+        </button>
+
+        <div id="draft-selector" class="draft-selector">
+            <span class="meta">Switch selection to another draft</span>
+            <div class="select-row">
+                <select id="draft-select" class="draft-select" aria-label="Select a draft">
+                    <option value="">Choose a draft</option>
+                    <option
+                        value='{{ jsonPath($draft_data, "fields.drafts[1].draft_id") }}'
+                        data-draft-id='{{ jsonPath($draft_data, "fields.drafts[1].draft_id") }}'
+                    >
+                        Draft #2
+                    </option>
+                    <option
+                        value='{{ jsonPath($draft_data, "fields.drafts[2].draft_id") }}'
+                        data-draft-id='{{ jsonPath($draft_data, "fields.drafts[2].draft_id") }}'
+                    >
+                        Draft #3
+                    </option>
+                    <option
+                        value='{{ jsonPath($draft_data, "fields.drafts[3].draft_id") }}'
+                        data-draft-id='{{ jsonPath($draft_data, "fields.drafts[3].draft_id") }}'
+                    >
+                        Draft #4
+                    </option>
+                </select>
+                <button type="button" id="use-selected-draft" class="use-draft-btn" disabled>
+                    Use draft
+                </button>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

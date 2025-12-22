@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FuseSell Quick Actions</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+:root {
+    --border: #e5e7eb;
+    --text: #0f172a;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent-soft: #eff6ff;
+}
+* { box-sizing: border-box; }
+body {
+    margin: 0;
+    padding: 6px 0;
+    background: transparent;
+    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+    color: var(--text);
+}
+.button-grid {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.quick-action-btn {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 12px 14px;
+    background: linear-gradient(135deg, #ffffff, #f8fafc);
+    text-align: left;
+    cursor: pointer;
+    transition: transform 120ms ease, box-shadow 180ms ease, border-color 180ms ease;
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
+    position: relative;
+    min-width: 200px;
+}
+.quick-action-btn:hover {
+    transform: translateY(-1px);
+    border-color: #cbd5e1;
+    box-shadow: 0 8px 20px rgba(37, 99, 235, 0.12);
+}
+.quick-action-btn:active { transform: scale(0.98); }
+.quick-action-btn .title {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+}
+.quick-action-btn .icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-soft);
+    color: var(--accent);
+}
+.title-text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    align-items: flex-start;
+}
+    </style>
+    <script>
+        function sendPrompt(button, text) {
+            // Try to send via window.parent.postMessage (MCP-UI method)
+            const messageId = 'remote-dom-prompt-' + Date.now();
+            window.parent.postMessage({
+                type: 'prompt',
+                payload: { prompt: text },
+                messageId
+            }, '*');
+
+            // Visual feedback
+            const originalHTML = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-check text-green-600"></i> <span class="text-green-600">Sent!</span>';
+            button.disabled = true;
+
+            setTimeout(() => {
+                button.innerHTML = originalHTML;
+                button.disabled = false;
+            }, 2000);
+
+            // Log for debugging
+            console.log(`Message sent to parent window: Type='prompt', ID='${messageId}'`);
+            console.log('Payload:', { prompt: text });
+        }
+
+        function openExtended(button) {
+            const candidates = [
+                'fusesell_data/knowledge_templates/agent-mcp-ui-buttons-extended.html',
+                '../fusesell_data/knowledge_templates/agent-mcp-ui-buttons-extended.html',
+                'agent-mcp-ui-buttons-extended.html'
+            ];
+            for (const url of candidates) {
+                try {
+                    const win = window.open(url, '_blank', 'noopener,noreferrer');
+                    if (win) {
+                        return;
+                    }
+                } catch (err) {
+                    // ignore and try next
+                }
+            }
+            // sendPrompt(button, 'Open quick actions panel.');
+        }
+
+        const resizeObserver = new ResizeObserver((entries) => {
+            entries.forEach((entry) => {
+                window.parent.postMessage(
+                    {
+                        type: "ui-size-change",
+                        payload: {
+                            height: entry.contentRect.height,
+                        },
+                    },
+                    "*",
+                );
+            });
+        });
+
+        resizeObserver.observe(document.documentElement);
+    </script>
+</head>
+
+<body>
+    <div class="button-grid">
+        <button onclick="sendPrompt(this, '@FS-Workspace-Dashboard')" class="quick-action-btn" aria-label="Open dashboard">
+            <div class="title">
+                <span class="icon"><i class="fas fa-chart-line"></i></span>
+                <span class="title-text">
+                    <span>Open Dashboard</span>
+                </span>
+            </div>
+        </button>
+
+        <button onclick="sendPrompt(this, '@Fusesell-KnowledgeProvider provide the onboarding checklist')" class="quick-action-btn" aria-label="Open onboarding checklist">
+            <div class="title">
+                <span class="icon"><i class="fas fa-list-check"></i></span>
+                <span class="title-text">
+                    <span>Onboarding Checklist</span>
+                </span>
+            </div>
+        </button>
+
+        <button onclick="openExtended(this)" class="quick-action-btn" aria-label="Open quick actions panel">
+            <div class="title">
+                <span class="icon"><i class="fas fa-rocket"></i></span>
+                <span class="title-text">
+                    <span>Quick Actions Panel</span>
+                </span>
+            </div>
+        </button>
+    </div>
+</body>
+</html>

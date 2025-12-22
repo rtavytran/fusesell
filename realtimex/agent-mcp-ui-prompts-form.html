@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FuseSell Prompt Launcher</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --card-bg: #ffffff;
+            --card-border: #e5e7eb;
+            --muted: #6b7280;
+            --text: #111827;
+            --accent: #2563eb;
+            --accent-soft: #eff6ff;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 16px;
+            font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+            background: #f9fafb;
+            color: var(--text);
+        }
+        h1 { margin: 0 0 8px 0; font-size: 18px; }
+        .subhead { margin: 0 0 16px 0; color: var(--muted); font-size: 12px; }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 12px;
+        }
+        .card {
+            background: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 12px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+        }
+        .card h2 {
+            margin: 0 0 6px 0;
+            font-size: 15px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .card p { margin: 0 0 10px 0; color: var(--muted); font-size: 12px; }
+        .action {
+            border: 1px solid var(--card-border);
+            border-radius: 6px;
+            padding: 8px;
+            margin-bottom: 8px;
+            background: #fff;
+        }
+        .action .title {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+        .action .meta { color: var(--muted); font-size: 11px; margin-top: 2px; }
+        .action label { display: block; font-size: 11px; margin-bottom: 4px; color: var(--muted); }
+        .action input {
+            width: 100%;
+            padding: 6px 8px;
+            font-size: 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            margin-bottom: 6px;
+        }
+        .action-footer {
+            display: flex;
+            justify-content: flex-end;
+            margin-top: 8px;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 10px;
+            font-size: 12px;
+            font-weight: 600;
+            color: #fff;
+            background: var(--accent);
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: transform 0.1s ease, box-shadow 0.2s ease;
+        }
+        .btn:active { transform: scale(0.98); }
+        .btn.secondary {
+            background: #e5e7eb;
+            color: var(--text);
+        }
+        .pill {
+            background: var(--accent-soft);
+            color: var(--accent);
+            font-size: 11px;
+            padding: 4px 8px;
+            border-radius: 999px;
+        }
+        .status {
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 12px;
+            background: var(--accent-soft);
+            border: 1px solid #dbeafe;
+            color: var(--accent);
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <h1>FuseSell Prompt Launcher</h1>
+    <p class="subhead">Click to send prompts to the agent, or fill in the fields and send.</p>
+    <div id="status" class="status" role="status">Loading prompt catalog…</div>
+    <div id="container" class="grid"></div>
+
+    <!-- Fallback config (kept in sync with agent-ui-prompts.json) -->
+    <script id="fallback-config" type="application/json">
+{
+  "meta": {
+    "version": "1.0.0",
+    "description": "Reusable prompt catalog for FuseSell MCP UI elements (buttons/forms)."
+  },
+  "sections": [
+    {
+      "id": "workspace",
+      "title": "Workspace & Status",
+      "description": "Check readiness and open the status surfaces.",
+      "actions": [
+        { "id": "workspace-dashboard", "label": "Open Dashboard", "prompt": "@FS-Workspace-Dashboard", "flow": "FS-Workspace-Dashboard", "type": "button" },
+        { "id": "onboarding-checklist", "label": "Onboarding Checklist", "prompt": "@Fusesell-KnowledgeProvider provide the onboarding checklist", "flow": "Fusesell-KnowledgeProvider", "type": "button" },
+        { "id": "view-sales-settings", "label": "View Sales Settings", "prompt": "@FS-TeamSettings-View View Sales Settings.", "flow": "FS-TeamSettings-View", "type": "button" }
+      ]
+    },
+    {
+      "id": "products",
+      "title": "Products",
+      "description": "Search or view product details.",
+      "actions": [
+        { "id": "product-search", "label": "Search Product", "flow": "FS-Product-View", "type": "form", "prompt_template": "@FS-Product-View View product details for {product_name}.", "fields": [ { "name": "product_name", "label": "Product name", "placeholder": "Nimbus CRM" } ] }
+      ]
+    },
+    {
+      "id": "settings",
+      "title": "Sales Settings",
+      "description": "Review current sales settings.",
+      "actions": [
+        { "id": "settings-view", "label": "View Sales Settings", "prompt": "@FS-TeamSettings-View View Sales Settings.", "flow": "FS-TeamSettings-View", "type": "button" }
+      ]
+    },
+    {
+      "id": "processes",
+      "title": "Sales Processes",
+      "description": "Start or query outreach workflows.",
+      "actions": [
+        { "id": "process-start", "label": "Start Sales Process", "flow": "FS-Process-Create", "type": "form", "prompt_template": "@FS-Process-Create Start a sales process.\nCustomer name: {customer_name}.\nCustomer email: {customer_email}.\nWebsite: {website}.", "fields": [ { "name": "customer_name", "label": "Customer name", "placeholder": "Alex Morgan", "required": true }, { "name": "customer_email", "label": "Customer email", "placeholder": "alex@contoso.com", "required": true }, { "name": "website", "label": "Website", "placeholder": "contoso.com", "required": true } ] },
+        { "id": "process-query-customer", "label": "Query by Customer", "flow": "FS-Process-Query", "type": "form", "prompt_template": "@FS-Process-Query Query sales processes for customer {customer_name}. Status: {status}. Limit: {limit}.", "fields": [ { "name": "customer_name", "label": "Customer name", "placeholder": "Contoso" }, { "name": "status", "label": "Status", "placeholder": "open" }, { "name": "limit", "label": "Limit", "placeholder": "5" } ] }
+      ]
+    }
+  ]
+}
+    </script>
+
+    <script>
+        const statusEl = document.getElementById('status');
+        const container = document.getElementById('container');
+
+        function setStatus(text, isError = false) {
+            statusEl.textContent = text;
+            statusEl.style.background = isError ? '#fef2f2' : 'var(--accent-soft)';
+            statusEl.style.borderColor = isError ? '#fecdd3' : '#dbeafe';
+            statusEl.style.color = isError ? '#b91c1c' : 'var(--accent)';
+        }
+
+        function sendPrompt(button, prompt) {
+            const messageId = 'remote-dom-prompt-' + Date.now();
+            window.parent.postMessage({ type: 'prompt', payload: { prompt }, messageId }, '*');
+
+            const original = button.textContent;
+            button.textContent = 'Sent!';
+            button.disabled = true;
+            setTimeout(() => {
+                button.textContent = original;
+                button.disabled = false;
+            }, 2000);
+            console.log(`Message sent: ${prompt}`);
+        }
+
+        function buildPrompt(template, values) {
+            let output = template;
+            Object.entries(values).forEach(([key, val]) => {
+                const safeVal = val || '';
+                const re = new RegExp(`\\{${key}\\}`, 'g');
+                output = output.replace(re, safeVal || '');
+            });
+            return output;
+        }
+
+        function fieldsComplete(values, fields) {
+            return (fields || []).every(f => {
+                if (!f.required) return true;
+                const val = values[f.name] || '';
+                return val.trim().length > 0;
+            });
+        }
+
+        function renderAction(action) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'action';
+
+            const title = document.createElement('div');
+            title.className = 'title';
+            title.innerHTML = `<span>${action.label}</span><span class="pill">${action.flow || action.type}</span>`;
+            wrapper.appendChild(title);
+
+            if (action.type === 'button') {
+                const btn = document.createElement('button');
+                btn.className = 'btn';
+                btn.innerHTML = '<i class="fas fa-paper-plane"></i><span>Send</span>';
+                btn.addEventListener('click', () => sendPrompt(btn, action.prompt));
+                const meta = document.createElement('div');
+                meta.className = 'meta';
+                meta.textContent = action.prompt;
+                wrapper.appendChild(meta);
+                const footer = document.createElement('div');
+                footer.className = 'action-footer';
+                footer.appendChild(btn);
+                wrapper.appendChild(footer);
+            } else if (action.type === 'form') {
+                const form = document.createElement('form');
+                form.addEventListener('submit', (e) => e.preventDefault());
+                const values = {};
+                const requiredFields = (action.fields || []).filter(f => f.required);
+                let allComplete = fieldsComplete(values, action.fields);
+                (action.fields || []).forEach(field => {
+                    const label = document.createElement('label');
+                    label.textContent = field.label;
+                    const input = document.createElement('input');
+                    input.name = field.name;
+                    input.placeholder = field.placeholder || '';
+                    if (field.required) input.required = true;
+                    input.addEventListener('input', () => {
+                        values[field.name] = input.value;
+                        allComplete = fieldsComplete(values, action.fields);
+                        btn.disabled = !allComplete;
+                    });
+                    form.appendChild(label);
+                    form.appendChild(input);
+                    values[field.name] = '';
+                });
+                const meta = document.createElement('div');
+                meta.className = 'meta';
+                meta.textContent = action.prompt_template || '';
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn';
+                btn.innerHTML = '<i class="fas fa-paper-plane"></i><span>Send</span>';
+                if (requiredFields.length > 0) {
+                    btn.disabled = true;
+                }
+                btn.addEventListener('click', () => {
+                    const prompt = buildPrompt(action.prompt_template || '', values);
+                    sendPrompt(btn, prompt);
+                });
+                const footer = document.createElement('div');
+                footer.className = 'action-footer';
+                footer.appendChild(btn);
+                form.appendChild(footer);
+                wrapper.appendChild(meta);
+                wrapper.appendChild(form);
+            }
+
+            return wrapper;
+        }
+
+        function renderSections(config) {
+            container.innerHTML = '';
+            (config.sections || []).forEach(section => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                const icon = section.id === 'workspace' ? 'fa-chart-pie' :
+                             section.id === 'products' ? 'fa-box' :
+                             section.id === 'settings' ? 'fa-sliders-h' :
+                             section.id === 'processes' ? 'fa-rocket' : 'fa-circle';
+                card.innerHTML = `
+                    <h2><i class="fas ${icon}"></i>${section.title}</h2>
+                    <p>${section.description || ''}</p>
+                `;
+                (section.actions || []).forEach(action => {
+                    card.appendChild(renderAction(action));
+                });
+                container.appendChild(card);
+            });
+        }
+
+        async function loadConfig() {
+            const fallback = JSON.parse(document.getElementById('fallback-config').textContent);
+            try {
+                const res = await fetch('./agent-ui-prompts.json', { cache: 'no-cache' });
+                if (!res.ok) throw new Error(res.statusText);
+                const data = await res.json();
+                setStatus('Ready.');
+                return data;
+            } catch (err) {
+                console.warn('Using fallback config:', err);
+                setStatus('Ready.');
+                return fallback;
+            }
+        }
+
+        loadConfig().then(renderSections).catch(err => {
+            console.error(err);
+            setStatus('Failed to load prompt catalog.', true);
+        });
+    </script>
+</body>
+</html>
