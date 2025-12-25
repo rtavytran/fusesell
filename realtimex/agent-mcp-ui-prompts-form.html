@@ -7,20 +7,41 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         :root {
+            color-scheme: dark light;
             --card-bg: #ffffff;
             --card-border: #e5e7eb;
             --muted: #6b7280;
             --text: #111827;
             --accent: #2563eb;
             --accent-soft: #eff6ff;
+            --bg: #f9fafb;
+            --input-bg: #fff;
+            --input-border: #d1d5db;
+            --shadow: rgba(0,0,0,0.04);
         }
+
+        /* Dark theme */
+        .dark {
+            --card-bg: #1e293b;
+            --card-border: #334155;
+            --muted: #94a3b8;
+            --text: #f1f5f9;
+            --accent: #3b82f6;
+            --accent-soft: #1e3a5f;
+            --bg: #0f172a;
+            --input-bg: #0f172a;
+            --input-border: #475569;
+            --shadow: rgba(0,0,0,0.2);
+        }
+
         * { box-sizing: border-box; }
         body {
             margin: 0;
             padding: 16px;
             font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
-            background: #f9fafb;
+            background: var(--bg);
             color: var(--text);
+            transition: background 0.2s, color 0.2s;
         }
         h1 { margin: 0 0 8px 0; font-size: 18px; }
         .subhead { margin: 0 0 16px 0; color: var(--muted); font-size: 12px; }
@@ -34,7 +55,7 @@
             border: 1px solid var(--card-border);
             border-radius: 8px;
             padding: 12px;
-            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+            box-shadow: 0 1px 2px var(--shadow);
         }
         .card h2 {
             margin: 0 0 6px 0;
@@ -49,7 +70,7 @@
             border-radius: 6px;
             padding: 8px;
             margin-bottom: 8px;
-            background: #fff;
+            background: var(--card-bg);
         }
         .action .title {
             display: flex;
@@ -65,10 +86,13 @@
             width: 100%;
             padding: 6px 8px;
             font-size: 12px;
-            border: 1px solid #d1d5db;
+            border: 1px solid var(--input-border);
             border-radius: 4px;
             margin-bottom: 6px;
+            background: var(--input-bg);
+            color: var(--text);
         }
+        .action input::placeholder { color: var(--muted); }
         .action-footer {
             display: flex;
             justify-content: flex-end;
@@ -89,8 +113,9 @@
             transition: transform 0.1s ease, box-shadow 0.2s ease;
         }
         .btn:active { transform: scale(0.98); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
         .btn.secondary {
-            background: #e5e7eb;
+            background: var(--card-border);
             color: var(--text);
         }
         .pill {
@@ -105,7 +130,7 @@
             border-radius: 6px;
             margin-bottom: 12px;
             background: var(--accent-soft);
-            border: 1px solid #dbeafe;
+            border: 1px solid var(--card-border);
             color: var(--accent);
             font-size: 12px;
         }
@@ -165,13 +190,36 @@
     </script>
 
     <script>
+        // Theme detection and auto-update
+        function applyTheme(theme) {
+        document.body.classList.remove('light', 'dark');
+        document.body.classList.add(theme);
+        }
+
+        // Request initial theme
+        window.parent.postMessage({ type: 'get-theme' }, '*');
+
+        // Listen for theme response and changes
+        window.addEventListener('message', (event) => {
+        if (event.data?.type === 'theme-response' || event.data?.type === 'theme-change') {
+            applyTheme(event.data.theme);
+        }
+        });
+
+        // Fallback to CSS media query
+        setTimeout(() => {
+        if (!document.body.classList.contains('light') && !document.body.classList.contains('dark')) {
+            applyTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        }
+        }, 100);
+
         const statusEl = document.getElementById('status');
         const container = document.getElementById('container');
 
         function setStatus(text, isError = false) {
             statusEl.textContent = text;
             statusEl.style.background = isError ? '#fef2f2' : 'var(--accent-soft)';
-            statusEl.style.borderColor = isError ? '#fecdd3' : '#dbeafe';
+            statusEl.style.borderColor = isError ? '#fecdd3' : 'var(--card-border)';
             statusEl.style.color = isError ? '#b91c1c' : 'var(--accent)';
         }
 
@@ -179,11 +227,11 @@
             const messageId = 'remote-dom-prompt-' + Date.now();
             window.parent.postMessage({ type: 'prompt', payload: { prompt }, messageId }, '*');
 
-            const original = button.textContent;
-            button.textContent = 'Sent!';
+            const original = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-check"></i><span>Sent!</span>';
             button.disabled = true;
             setTimeout(() => {
-                button.textContent = original;
+                button.innerHTML = original;
                 button.disabled = false;
             }, 2000);
             console.log(`Message sent: ${prompt}`);
@@ -315,6 +363,17 @@
             console.error(err);
             setStatus('Failed to load prompt catalog.', true);
         });
+
+        // Resize observer for iframe auto-resize
+        const resizeObserver = new ResizeObserver((entries) => {
+            entries.forEach((entry) => {
+                window.parent.postMessage({
+                    type: "ui-size-change",
+                    payload: { height: entry.contentRect.height },
+                }, "*");
+            });
+        });
+        resizeObserver.observe(document.documentElement);
     </script>
 </body>
 </html>

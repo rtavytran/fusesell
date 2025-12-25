@@ -7,19 +7,45 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
 :root {
-    --border: #e5e7eb;
-    --text: #0f172a;
-    --muted: #6b7280;
-    --accent: #2563eb;
-    --accent-soft: #eff6ff;
+    --bg-primary: #0e0f0f;
+    --bg-secondary: #1b1b1e;
+    --bg-input: #27282a;
+    --bg-card: #18181b;
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.6);
+    --text-muted: #a1a1aa;
+    --accent-primary: #36bffa;
+    --accent-cta: #7cd4fd;
+    --border-default: rgba(255, 255, 255, 0.1);
+    --border-subtle: #3f3f46;
+    --gray-50: #fafafa;
+    --gray-100: #f4f4f5;
+    --gray-700: #3f3f46;
+    --gray-800: #27282a;
+    --gray-900: #18181b;
 }
-* { box-sizing: border-box; }
+
+body.light {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f9fbfd;
+    --bg-input: #eaeaea;
+    --bg-card: #ffffff;
+    --text-primary: #0e0f0f;
+    --text-secondary: #7a7d7e;
+    --text-muted: #6b7280;
+    --accent-primary: #0ba5ec;
+    --border-default: rgba(0, 0, 0, 0.1);
+    --border-subtle: #e4e4e7;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
 body {
     margin: 0;
     padding: 6px 0;
-    background: transparent;
-    font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
-    color: var(--text);
+    background: var(--bg-primary);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    color: var(--text-primary);
+    font-size: 14px;
 }
 .button-grid {
     display: flex;
@@ -27,30 +53,27 @@ body {
     flex-wrap: wrap;
 }
 .quick-action-btn {
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-subtle);
     border-radius: 12px;
     padding: 12px 14px;
-    background: linear-gradient(135deg, #ffffff, #f8fafc);
+    background: var(--bg-card);
     text-align: left;
     cursor: pointer;
-    transition: transform 120ms ease, box-shadow 180ms ease, border-color 180ms ease;
-    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
+    transition: opacity 0.2s;
     position: relative;
     min-width: 200px;
 }
 .quick-action-btn:hover {
-    transform: translateY(-1px);
-    border-color: #cbd5e1;
-    box-shadow: 0 8px 20px rgba(37, 99, 235, 0.12);
+    opacity: 0.9;
 }
 .quick-action-btn:active { transform: scale(0.98); }
 .quick-action-btn .title {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 10px;
     font-size: 13px;
     font-weight: 700;
-    color: var(--text);
+    color: var(--text-primary);
 }
 .quick-action-btn .icon {
     width: 34px;
@@ -59,8 +82,8 @@ body {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: var(--accent-soft);
-    color: var(--accent);
+    background: var(--bg-secondary);
+    color: var(--accent-primary);
 }
 .title-text {
     display: flex;
@@ -69,69 +92,9 @@ body {
     align-items: flex-start;
 }
     </style>
-    <script>
-        function sendPrompt(button, text) {
-            // Try to send via window.parent.postMessage (MCP-UI method)
-            const messageId = 'remote-dom-prompt-' + Date.now();
-            window.parent.postMessage({
-                type: 'prompt',
-                payload: { prompt: text },
-                messageId
-            }, '*');
-
-            // Visual feedback
-            const originalHTML = button.innerHTML;
-            button.innerHTML = '<i class="fas fa-check text-green-600"></i> <span class="text-green-600">Sent!</span>';
-            button.disabled = true;
-
-            setTimeout(() => {
-                button.innerHTML = originalHTML;
-                button.disabled = false;
-            }, 2000);
-
-            // Log for debugging
-            console.log(`Message sent to parent window: Type='prompt', ID='${messageId}'`);
-            console.log('Payload:', { prompt: text });
-        }
-
-        function openExtended(button) {
-            const candidates = [
-                'fusesell_data/knowledge_templates/agent-mcp-ui-buttons-extended.html',
-                '../fusesell_data/knowledge_templates/agent-mcp-ui-buttons-extended.html',
-                'agent-mcp-ui-buttons-extended.html'
-            ];
-            for (const url of candidates) {
-                try {
-                    const win = window.open(url, '_blank', 'noopener,noreferrer');
-                    if (win) {
-                        return;
-                    }
-                } catch (err) {
-                    // ignore and try next
-                }
-            }
-            // sendPrompt(button, 'Open quick actions panel.');
-        }
-
-        const resizeObserver = new ResizeObserver((entries) => {
-            entries.forEach((entry) => {
-                window.parent.postMessage(
-                    {
-                        type: "ui-size-change",
-                        payload: {
-                            height: entry.contentRect.height,
-                        },
-                    },
-                    "*",
-                );
-            });
-        });
-
-        resizeObserver.observe(document.documentElement);
-    </script>
 </head>
 
-<body>
+<body class="dark">
     <div class="button-grid">
         <button onclick="sendPrompt(this, '@FS-Workspace-Dashboard')" class="quick-action-btn" aria-label="Open dashboard">
             <div class="title">
@@ -151,14 +114,89 @@ body {
             </div>
         </button>
 
-        <button onclick="openExtended(this)" class="quick-action-btn" aria-label="Open quick actions panel">
+        <!-- <button onclick="openExtended(this)" class="quick-action-btn" aria-label="Open quick actions panel">
             <div class="title">
                 <span class="icon"><i class="fas fa-rocket"></i></span>
                 <span class="title-text">
                     <span>Quick Actions Panel</span>
                 </span>
             </div>
-        </button>
+        </button> -->
     </div>
+
+    <script>
+        // Theme detection and auto-update
+        function applyTheme(theme) {
+            document.body.classList.remove('light', 'dark');
+            document.body.classList.add(theme);
+        }
+
+        // Request initial theme
+        window.parent.postMessage({ type: 'get-theme' }, '*');
+
+        // Listen for theme response and changes
+        window.addEventListener('message', (event) => {
+            if (event.data?.type === 'theme-response' || event.data?.type === 'theme-change') {
+                applyTheme(event.data.theme);
+            }
+        });
+
+        // Fallback to CSS media query
+        setTimeout(() => {
+            if (!document.body.classList.contains('light') && !document.body.classList.contains('dark')) {
+                applyTheme(window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            }
+        }, 100);
+
+        function sendPrompt(button, text) {
+            const messageId = 'remote-dom-prompt-' + Date.now();
+            window.parent.postMessage({
+                type: 'prompt',
+                payload: { prompt: text },
+                messageId
+            }, '*');
+
+            const originalHTML = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-check"></i> <span>Sent!</span>';
+            button.disabled = true;
+
+            setTimeout(() => {
+                button.innerHTML = originalHTML;
+                button.disabled = false;
+            }, 2000);
+
+            console.log(`Message sent: ${text}`);
+        }
+
+        function openExtended(button) {
+            const candidates = [
+                'fusesell_data/knowledge_templates/agent-mcp-ui-buttons-extended.html',
+                '../fusesell_data/knowledge_templates/agent-mcp-ui-buttons-extended.html',
+                'agent-mcp-ui-buttons-extended.html'
+            ];
+            for (const url of candidates) {
+                try {
+                    const win = window.open(url, '_blank', 'noopener,noreferrer');
+                    if (win) {
+                        return;
+                    }
+                } catch (err) {
+                    // ignore and try next
+                }
+            }
+        }
+
+        // Resize observer for iframe auto-resize
+        const resizeObserver = new ResizeObserver((entries) => {
+            entries.forEach((entry) => {
+                window.parent.postMessage({
+                    type: "ui-size-change",
+                    payload: { height: entry.contentRect.height },
+                }, "*");
+            });
+        });
+
+        resizeObserver.observe(document.documentElement);
+    </script>
 </body>
 </html>
