@@ -1,0 +1,13 @@
+Subject: Quick Question About ##company_name##
+
+Hi ##customer_first_name##,
+
+I noticed ##company_name## is doing innovative work in the industry and wanted to reach out.
+
+Many companies we work with face similar challenges. We've helped organizations achieve significant improvements through our ##selected_product##.
+
+Would you be open to a quick 15-minute call next week to discuss how we might be able to help ##company_name##?
+
+Best regards,
+##staff_name##
+##org_name##

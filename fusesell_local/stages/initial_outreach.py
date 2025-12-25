@@ -734,11 +734,15 @@ class InitialOutreachStage(BaseStage):
         contact_info = customer_data.get('primaryContact', {}) or {}
         pain_points = customer_data.get('painPoints', [])
 
+        # Check if template_files were provided via config (API override)
+        template_files_override = self.config.get('template_files')
+
         prompt_drafts = self._generate_email_drafts_from_prompt(
             customer_data,
             recommended_product,
             scoring_data,
-            context
+            context,
+            template_files=template_files_override  # Pass template files if provided
         )
         if not prompt_drafts:
             raise RuntimeError(
@@ -749,22 +753,95 @@ class InitialOutreachStage(BaseStage):
         self.logger.info("Generated %s email drafts successfully", len(prompt_drafts))
         return prompt_drafts
 
-    def _generate_email_drafts_from_prompt(self, customer_data: Dict[str, Any], recommended_product: Dict[str, Any], scoring_data: Dict[str, Any], context: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Attempt to generate drafts using configured prompt template."""
-        prompt_template = self.get_prompt_template('email_generation')
+    def _generate_email_drafts_from_prompt(self, customer_data: Dict[str, Any], recommended_product: Dict[str, Any], scoring_data: Dict[str, Any], context: Dict[str, Any], template_files: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """
+        Attempt to generate drafts using configured prompt template.
+
+        Args:
+            customer_data: Customer information
+            recommended_product: Recommended product details
+            scoring_data: Lead scoring data
+            context: Execution context
+            template_files: Optional list of template file paths to use as examples/templates
+
+        Returns:
+            List of generated email drafts
+        """
+        # Check team settings for template configuration
+        team_id = self.config.get('team_id')
+        team_settings = None
+        use_team_templates = False
+
+        if team_id:
+            team_settings = self.get_team_setting('gs_team_initial_outreach', team_id, None)
+            if team_settings and isinstance(team_settings, dict):
+                # Check if fewshots mode is enabled
+                if team_settings.get('fewshots', False):
+                    use_team_templates = True
+                    # Use template files from team settings if not provided as argument
+                    if not template_files:
+                        template_files = team_settings.get('fewshots_location', [])
+
+                    self.logger.info(f"Using team template configuration: fewshots={use_team_templates}, strict_follow={team_settings.get('fewshots_strict_follow', False)}, templates={len(template_files) if template_files else 0}")
+
+        # Get base prompt template
+        if use_team_templates and team_settings:
+            # Use custom prompt from team settings
+            prompt_template = team_settings.get('prompt', '')
+            if not prompt_template:
+                # Fallback to default
+                prompt_template = self.get_prompt_template('email_generation')
+        else:
+            # Use default prompt template
+            prompt_template = self.get_prompt_template('email_generation')
+
         if not prompt_template or not prompt_template.strip():
             raise RuntimeError(
                 "Email generation prompt template missing for initial_outreach.email_generation. "
                 "Provide it in prompts.json under data_dir/config."
             )
 
-        prompt = self._prepare_email_generation_prompt(
-            prompt_template,
-            customer_data,
-            recommended_product,
-            scoring_data,
-            context
-        )
+        # Load template examples if provided
+        template_examples = []
+        if template_files:
+            template_examples = self._load_template_files(template_files)
+            self.logger.info(f"Loaded {len(template_examples)} template examples from {len(template_files)} files")
+
+        # Build the final prompt based on mode
+        if use_team_templates and team_settings:
+            is_strict_mode = team_settings.get('fewshots_strict_follow', False)
+
+            # Template-only mode: fewshots=true AND fewshots_strict_follow=true
+            # Skip LLM entirely and just replace placeholders in templates
+            if is_strict_mode and template_examples:
+                self.logger.info("Using TEMPLATE_ONLY mode - skipping LLM, doing placeholder replacement only")
+                return self._generate_drafts_from_templates_only(
+                    template_examples=template_examples,
+                    customer_data=customer_data,
+                    recommended_product=recommended_product,
+                    scoring_data=scoring_data,
+                    context=context
+                )
+
+            prompt = self._build_template_based_prompt(
+                base_prompt=prompt_template,
+                template_examples=template_examples,
+                customer_data=customer_data,
+                recommended_product=recommended_product,
+                scoring_data=scoring_data,
+                context=context,
+                team_settings=team_settings,
+                strict_mode=is_strict_mode
+            )
+        else:
+            # Standard prompt generation (backward compatible)
+            prompt = self._prepare_email_generation_prompt(
+                prompt_template,
+                customer_data,
+                recommended_product,
+                scoring_data,
+                context
+            )
 
         if not prompt or not prompt.strip():
             raise RuntimeError('Email generation prompt resolved to empty content after placeholder replacement')
@@ -916,6 +993,290 @@ class InitialOutreachStage(BaseStage):
         }
 
         return {key: (value if value is not None else '') for key, value in replacements.items()}
+
+    def _load_template_files(self, template_file_paths: List[str]) -> List[str]:
+        """
+        Load template files from provided file paths.
+
+        For relative paths, searches in multiple locations in this priority order:
+        1. workspace_dir (where uploaded files are stored in RealtimeX)
+        2. data_dir (fusesell_data directory)
+        3. data_dir/templates subdirectory
+
+        Args:
+            template_file_paths: List of file paths to load templates from
+
+        Returns:
+            List of template contents
+        """
+        import os
+        from pathlib import Path
+        templates = []
+
+        for file_path_str in template_file_paths:
+            try:
+                file_path = file_path_str.strip()
+                resolved_path = None
+
+                # Handle absolute paths directly
+                if os.path.isabs(file_path):
+                    if os.path.exists(file_path):
+                        resolved_path = file_path
+                    else:
+                        self.logger.warning(f"Absolute template file not found: {file_path}")
+                        continue
+                else:
+                    # For relative paths, try multiple locations
+                    data_dir = self.config.get('data_dir', './fusesell_data')
+                    data_dir_path = Path(data_dir)
+
+                    # Calculate workspace_dir (parent of data_dir for RealtimeX setups)
+                    # In RealtimeX: workspace_dir/fusesell_data/...
+                    # So workspace_dir = data_dir.parent
+                    workspace_dir = data_dir_path.parent if data_dir_path.name == 'fusesell_data' else data_dir_path
+
+                    # Priority search order
+                    candidate_paths = [
+                        workspace_dir / file_path,              # 1. workspace_dir/uploaded_file.txt
+                        data_dir_path / file_path,              # 2. fusesell_data/templates/file.txt
+                        data_dir_path / 'templates' / file_path # 3. fusesell_data/templates/file.txt (if not already in path)
+                    ]
+
+                    # Find first existing path
+                    for candidate in candidate_paths:
+                        if candidate.exists():
+                            resolved_path = str(candidate)
+                            break
+
+                    if not resolved_path:
+                        # Log all attempted paths for debugging
+                        attempted = ', '.join(str(p) for p in candidate_paths)
+                        self.logger.warning(f"Template file not found in any location. Tried: {attempted}")
+                        continue
+
+                # Read the template file
+                with open(resolved_path, 'r', encoding='utf-8') as f:
+                    template_content = f.read()
+                    if template_content.strip():
+                        templates.append(template_content.strip())
+                        self.logger.info(f"Loaded template from: {resolved_path}")
+                    else:
+                        self.logger.warning(f"Template file is empty: {resolved_path}")
+
+            except Exception as e:
+                self.logger.error(f"Failed to load template file {file_path_str}: {str(e)}")
+                continue
+
+        return templates
+
+    def _generate_drafts_from_templates_only(
+        self,
+        template_examples: List[str],
+        customer_data: Dict[str, Any],
+        recommended_product: Dict[str, Any],
+        scoring_data: Dict[str, Any],
+        context: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """
+        Generate email drafts by replacing placeholders in templates WITHOUT using LLM.
+        This is used when fewshots=true AND fewshots_strict_follow=true.
+
+        Args:
+            template_examples: List of template contents with placeholders
+            customer_data: Customer information
+            recommended_product: Recommended product details
+            scoring_data: Lead scoring data
+            context: Execution context
+
+        Returns:
+            List of generated email drafts (one per template)
+        """
+        import uuid
+        from datetime import datetime
+
+        # Get placeholder replacements
+        replacements = self._build_prompt_replacements(
+            customer_data,
+            recommended_product,
+            scoring_data,
+            context
+        )
+
+        drafts: List[Dict[str, Any]] = []
+
+        for idx, template in enumerate(template_examples, 1):
+            # Replace all placeholders in the template
+            draft_content = template
+            for placeholder, value in replacements.items():
+                draft_content = draft_content.replace(placeholder, str(value))
+
+            # Parse the draft content to extract subject and body
+            # Assume format: first line is subject (if it doesn't start with greeting)
+            # Otherwise extract from content
+            lines = draft_content.strip().split('\n')
+
+            # Try to extract subject line
+            subject = ""
+            body_lines = []
+
+            # Simple heuristic: if first line looks like a subject (short, no greeting)
+            if lines and len(lines[0].strip()) < 100 and not any(greeting in lines[0].lower() for greeting in ['hello', 'hi', 'dear', 'greetings']):
+                subject = lines[0].strip()
+                body_lines = lines[1:]
+            else:
+                # Generate a simple subject from context
+                customer_name = customer_data.get('primaryContact', {}).get('name') or customer_data.get('companyInfo', {}).get('company_name', 'Prospective Client')
+                product_name = recommended_product.get('product_name', 'our solution')
+                subject = f"Regarding {product_name}"
+                body_lines = lines
+
+            body = '\n'.join(body_lines).strip()
+
+            # Create draft entry
+            draft_id = str(uuid.uuid4())
+
+            draft_entry = {
+                'draft_id': draft_id,
+                'subject': subject,
+                'email_body': body,
+                'recipient_email': context.get('customer_email') or customer_data.get('primaryContact', {}).get('email', ''),
+                'recipient_name': context.get('customer_name') or customer_data.get('primaryContact', {}).get('name', ''),
+                'status': 'draft',
+                'priority_order': idx,
+                'approach': f'template_{idx}',
+                'tone': 'template',
+                'focus': 'template_based',
+                'call_to_action': '',
+                'personalization_score': 80,
+                'generated_at': datetime.now().isoformat(),
+                'metadata': {
+                    'generation_method': 'template_only',
+                    'template_index': idx,
+                    'fewshots_strict_follow': True
+                }
+            }
+
+            drafts.append(draft_entry)
+            self.logger.info(f"Generated template-only draft {idx}: subject='{subject[:50]}...'")
+
+        if not drafts:
+            raise RuntimeError('No drafts generated from templates in template_only mode')
+
+        self.logger.info(f"Successfully generated {len(drafts)} drafts using template_only mode (no LLM)")
+        return drafts
+
+    def _build_template_based_prompt(
+        self,
+        base_prompt: str,
+        template_examples: List[str],
+        customer_data: Dict[str, Any],
+        recommended_product: Dict[str, Any],
+        scoring_data: Dict[str, Any],
+        context: Dict[str, Any],
+        team_settings: Dict[str, Any],
+        strict_mode: bool
+    ) -> str:
+        """
+        Build prompt with template examples based on configuration mode.
+
+        Args:
+            base_prompt: Base prompt template
+            template_examples: List of template example contents
+            customer_data: Customer information
+            recommended_product: Recommended product details
+            scoring_data: Lead scoring data
+            context: Execution context
+            team_settings: Team configuration settings
+            strict_mode: Whether to use strict template mode
+
+        Returns:
+            Final prompt string with templates incorporated
+        """
+        # Get placeholder replacements
+        replacements = self._build_prompt_replacements(
+            customer_data,
+            recommended_product,
+            scoring_data,
+            context
+        )
+
+        # Replace placeholders in base prompt
+        prompt = base_prompt
+        for placeholder, value in replacements.items():
+            prompt = prompt.replace(placeholder, value)
+
+        # Add template-specific instructions
+        prompt_in_template = team_settings.get('prompt_in_template', '')
+
+        if strict_mode:
+            # Strict Template Mode: Use templates as exact examples to mirror
+            # If no file-based templates, check for inline template
+            if not template_examples and prompt_in_template:
+                # Use prompt_in_template as the inline template content
+                template_examples = [prompt_in_template]
+                self.logger.info("Using inline template from prompt_in_template in strict mode")
+
+            if template_examples:
+                self.logger.info("Using STRICT template mode - templates will be mirrored exactly")
+
+                examples_section = "\n\n# TEMPLATE EXAMPLES TO MIRROR EXACTLY\n\n"
+                examples_section += "Mirror the EXACT CONTENT and STRUCTURE of these templates. Only replace placeholders with customer-specific information.\n\n"
+
+                for i, example in enumerate(template_examples, 1):
+                    # Replace placeholders in template before showing to LLM
+                    processed_example = example
+                    for placeholder, value in replacements.items():
+                        processed_example = processed_example.replace(placeholder, value)
+
+                    examples_section += f"## Example Template {i}:\n```\n{processed_example}\n```\n\n"
+
+                # Add strict instructions (skip if prompt_in_template was used as the template itself)
+                if prompt_in_template and prompt_in_template not in template_examples:
+                    examples_section += f"\n# STRICT INSTRUCTIONS:\n{prompt_in_template}\n\n"
+                else:
+                    examples_section += "\n# STRICT INSTRUCTIONS:\n"
+                    examples_section += "- Mirror the EXACT CONTENT of provided examples with ZERO wording changes\n"
+                    examples_section += "- Only replace placeholders like ##customer_name##, ##staff_name##, ##org_name##, ##selected_product##, etc.\n"
+                    examples_section += "- NO PLACEHOLDERS OR COMPANY NAMES AS GREETINGS\n"
+                    examples_section += "- If recipient name is unclear, use 'Hi' or 'Hello' without a name\n"
+                    examples_section += "- Never use company name as a greeting\n"
+                    examples_section += "- No hyperlinks/attachments unless in original template\n"
+                    examples_section += "- No invented information\n"
+                    examples_section += "- Generate ONLY ONE draft that mirrors the template exactly\n\n"
+
+                prompt = prompt + examples_section
+            else:
+                self.logger.warning("Strict mode enabled but no template examples or prompt_in_template provided")
+
+        else:
+            # AI Enhancement Mode: Use templates as inspiration
+            if template_examples:
+                self.logger.info("Using AI ENHANCEMENT mode - templates as inspiration")
+
+                examples_section = "\n\n# EXAMPLE TEMPLATES FOR INSPIRATION\n\n"
+                examples_section += "Use these examples as inspiration while applying best practices and customization.\n\n"
+
+                for i, example in enumerate(template_examples, 1):
+                    # Replace placeholders in template before showing to LLM
+                    processed_example = example
+                    for placeholder, value in replacements.items():
+                        processed_example = processed_example.replace(placeholder, value)
+
+                    examples_section += f"## Example {i}:\n```\n{processed_example}\n```\n\n"
+
+                # Add enhancement instructions
+                if prompt_in_template:
+                    examples_section += f"\n# CUSTOMIZATION GUIDANCE:\n{prompt_in_template}\n\n"
+                else:
+                    examples_section += "\n# CUSTOMIZATION GUIDANCE:\n"
+                    examples_section += "- Use the provided examples as inspiration\n"
+                    examples_section += "- Adapt the tone, style, and structure to fit the customer context\n"
+                    examples_section += "- Incorporate best practices for email outreach\n"
+                    examples_section += "- Ensure personalization and relevance\n\n"
+
+                prompt = prompt + examples_section
+
+        return prompt
 
     def _build_company_info_summary(self, company_info: Dict[str, Any], contact_info: Dict[str, Any], pain_points: List[Dict[str, Any]], scoring_data: Dict[str, Any]) -> str:
         lines: List[str] = []

@@ -1,0 +1,1012 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FuseSell Workspace Dashboard V2</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'fuse-green': {
+                            50: '#f0fdf4',
+                            100: '#dcfce7',
+                            200: '#bbf7d0',
+                            300: '#86efac',
+                            400: '#4ade80',
+                            500: '#22c55e',
+                            600: '#16a34a',
+                            700: '#15803d',
+                            800: '#166534',
+                            900: '#14532d',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #0e0f0f;
+            --bg-secondary: #1b1b1e;
+            --bg-card: #18181b;
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-muted: #a1a1aa;
+            --accent: #36bffa;
+            --border: rgba(255, 255, 255, 0.1);
+            --border-subtle: #3f3f46;
+        }
+        body.light {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f9fbfd;
+            --bg-card: #ffffff;
+            --text-primary: #0e0f0f;
+            --text-secondary: #7a7d7e;
+            --text-muted: #6b7280;
+            --accent: #0ba5ec;
+            --border: rgba(0, 0, 0, 0.1);
+            --border-subtle: #e4e4e7;
+        }
+        body {
+            background: var(--bg-primary) !important;
+            color: var(--text-primary) !important;
+        }
+        .theme-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+        }
+        .theme-chip {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+        }
+        .theme-border {
+            border-color: var(--border);
+        }
+        .quick-action-btn:active {
+            transform: scale(0.98);
+        }
+        .status-badge {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+    </style>
+</head>
+
+<body class="font-sans">
+    <main class="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-4">
+        <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-100 light:text-gray-900" id="org-name">Loading...</h1>
+                <p class="text-sm text-gray-400 light:text-gray-600">Interactive workspace dashboard with quick actions</p>
+            </div>
+            <span class="text-xs bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-medium">
+                <i class="fas fa-bolt mr-1"></i>Interactive Mode
+            </span>
+        </div>
+
+        <!-- Top Metrics Cards -->
+        <div id="metrics-cards" class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+            <!-- Rendered by JavaScript -->
+        </div>
+
+        <!-- Quick Actions Section -->
+        <div id="quick-actions" class="theme-card rounded-lg shadow-sm p-4 border theme-border mb-4">
+            <!-- Rendered by JavaScript -->
+        </div>
+
+        <!-- Analytics Charts Grid -->
+        <div id="analytics" class="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+            <!-- Rendered by JavaScript -->
+        </div>
+
+        <!-- Tabbed Content -->
+        <div id="tabs" class="theme-card rounded-lg shadow-sm border theme-border">
+            <!-- Rendered by JavaScript -->
+        </div>
+    </main>
+
+    <script id="dashboard-data" type="application/json">{{DATA}}</script>
+    <script>
+        // Load injected JSON; fallback to empty object when opened standalone
+        function loadDashboardData() {
+            const el = document.getElementById('dashboard-data');
+            if (!el) return {};
+            const raw = (el.textContent || '').trim();
+            if (!raw) return {};
+            try {
+                return JSON.parse(raw);
+            } catch (err) {
+                console.warn('Failed to parse dashboard data, using empty object.', err);
+                return {};
+            }
+        }
+
+        const dashboardData = loadDashboardData();
+        const data = (dashboardData && typeof dashboardData === 'object') ? dashboardData : {};
+
+        // Parent communication helpers (RealtimeX embedding)
+        function applyTheme(theme) {
+            document.body.classList.remove('light', 'dark');
+            document.body.classList.add(theme === 'light' ? 'light' : 'dark');
+        }
+
+        function send(type, payload) {
+            try {
+                window.parent.postMessage({ type, payload, messageId: 'mcp-' + Date.now() }, '*');
+            } catch (err) {
+                console.warn('postMessage failed', err);
+            }
+        }
+
+        window.addEventListener('message', (event) => {
+            if (event.data?.type === 'theme-response' || event.data?.type === 'theme-change') {
+                applyTheme(event.data.theme);
+            }
+        });
+
+        // Request theme from parent and set a fallback
+        window.parent.postMessage({ type: 'get-theme' }, '*');
+        setTimeout(() => {
+            if (!document.body.className) {
+                applyTheme(matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+            }
+        }, 100);
+
+        // Auto-resize the iframe
+        new ResizeObserver(entries => {
+            const height = entries[0]?.contentRect?.height || document.documentElement.scrollHeight;
+            send('ui-size-change', { height });
+        }).observe(document.documentElement);
+
+        // Safe access helpers so the page renders even with empty data
+        function getSafeNumber(value, fallback = 0) {
+            const num = Number(value);
+            return Number.isFinite(num) ? num : fallback;
+        }
+
+        function getSafeString(value, fallback = '') {
+            if (typeof value === 'string' && value.trim() !== '') {
+                return value;
+            }
+            return fallback;
+        }
+
+        function getSafeArray(value) {
+            return Array.isArray(value) ? value : [];
+        }
+
+        function getSafeObject(value) {
+            if (value === null || value === undefined) return {};
+            if (Array.isArray(value)) return { items: value };
+            if (typeof value === 'object') return value;
+            return {};
+        }
+
+
+        function normalizeQuickActions(actions) {
+            return getSafeArray(actions).map(action => ({
+                icon: getSafeString(action.icon, 'fa-bolt'),
+                label: getSafeString(action.label, 'Action'),
+                prompt: getSafeString(action.prompt, ''),
+                color: getSafeString(action.color, 'blue'),
+            }));
+        }
+
+        function normalizeProducts(products) {
+            return getSafeArray(products).map(product => ({
+                name: getSafeString(product.name ?? product.product_name, 'Unknown'),
+                price: getSafeNumber(product.price, 0),
+                linked: Boolean(product.linked ?? product.is_linked),
+            }));
+        }
+
+        function normalizeProcesses(processes) {
+            return getSafeArray(processes).map(process => {
+                const taskId = getSafeString(process.task_id ?? process.id, '');
+                const taskIdShort = getSafeString(process.task_id_short, taskId ? taskId.slice(0, 8) : 'N/A');
+                return {
+                    customer_display: getSafeString(process.customer_display, 'Unknown'),
+                    status: getSafeString(process.status, 'unknown'),
+                    task_id: taskId,
+                    task_id_short: taskIdShort,
+                };
+            });
+        }
+
+        function normalizeConfigItems(items) {
+            return getSafeArray(items).map(item => ({
+                key: getSafeString(item.key, ''),
+                label: getSafeString(item.label, 'Configuration Item'),
+                icon: getSafeString(item.icon, 'fa-check-circle'),
+                prompt: getSafeString(item.prompt, ''),
+                configured: Boolean(item.configured ?? item.is_configured),
+            }));
+        }
+
+        // Utility function to send prompts
+        function sendPrompt(button, text) {
+            const originalHTML = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> <span>Sending...</span>';
+            button.disabled = true;
+
+            let sent = false;
+            try {
+                send('prompt', { prompt: text });
+                sent = true;
+            } catch (err) {
+                console.warn('postMessage prompt failed, falling back to copy', err);
+            }
+
+            if (!sent) {
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.style.position = 'fixed';
+                textarea.style.top = '-9999px';
+                document.body.appendChild(textarea);
+
+                try {
+                    textarea.select();
+                    textarea.setSelectionRange(0, 99999);
+                    sent = document.execCommand('copy');
+                } catch (err) {
+                    console.error('Copy failed:', err);
+                }
+                document.body.removeChild(textarea);
+            }
+
+            setTimeout(() => {
+                button.innerHTML = sent
+                    ? '<i class="fas fa-check text-green-600"></i> <span class="text-green-600">Sent!</span>'
+                    : '<i class="fas fa-exclamation-triangle text-yellow-500"></i> <span class="text-yellow-600">Retry</span>';
+                setTimeout(() => {
+                    button.innerHTML = originalHTML;
+                    button.disabled = false;
+                }, 1200);
+            }, 150);
+        }
+
+        // Tab switching
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+            document.querySelectorAll('.tab-button').forEach(b => {
+                b.classList.remove('border-fuse-green-500', 'text-fuse-green-600');
+                b.classList.add('border-transparent', 'text-gray-500');
+            });
+            document.getElementById(tabName + '-content').classList.remove('hidden');
+            const activeButton = document.querySelector(`[data-tab="${tabName}"]`);
+            activeButton.classList.remove('border-transparent', 'text-gray-500');
+            activeButton.classList.add('border-fuse-green-500', 'text-fuse-green-600');
+        }
+
+        // Render functions
+        function renderOrgName() {
+            document.getElementById('org-name').textContent = getSafeString(data.org_name, 'FuseSell Dashboard');
+        }
+
+        function renderMetricsCards() {
+            const statusColor = getSafeString(data.status_color, 'yellow');
+            const html = `
+                <div class="bg-${statusColor}-50 light:bg-${statusColor}-50 rounded-lg shadow-sm p-4 border border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-medium text-gray-800">${getSafeString('Setup Completion')}</p>
+                            <p class="text-2xl font-bold text-gray-900">${getSafeNumber(data.completion_percentage)}%</p>
+                            <p class="text-xs text-gray-700 mt-1">${getSafeNumber(data.required_settings_count)}/${getSafeNumber(data.total_required, 4)} settings configured</p>
+                        </div>
+                        <div class="p-2 bg-${statusColor}-100 rounded-full">
+                            <i class="fas fa-tasks text-${statusColor}-600"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-fuse-green-50 light:bg-fuse-green-50 rounded-lg shadow-sm p-4 border border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-medium text-gray-800">Active Processes</p>
+                            <p class="text-2xl font-bold text-gray-900">${getSafeNumber(data.active_processes_count)}</p>
+                            <p class="text-xs text-gray-700 mt-1">${getSafeNumber(data.completed_processes_count)} completed</p>
+                        </div>
+                        <div class="p-2 bg-fuse-green-100 rounded-full">
+                            <i class="fas fa-cogs text-fuse-green-600"></i>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-fuse-green-50 light:bg-fuse-green-50 rounded-lg shadow-sm p-4 border border-gray-200">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-xs font-medium text-gray-800">Products in Catalog</p>
+                            <p class="text-2xl font-bold text-gray-900">${getSafeNumber(data.total_products)}</p>
+                            <p class="text-xs text-gray-700 mt-1">${getSafeNumber(data.linked_products_count)} linked</p>
+                        </div>
+                        <div class="p-2 bg-fuse-green-100 rounded-full">
+                            <i class="fas fa-box text-fuse-green-600"></i>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('metrics-cards').innerHTML = html;
+        }
+
+        function renderQuickActions() {
+            const actions = normalizeQuickActions(data.quick_actions);
+            let actionsHtml = '';
+
+            const colorClasses = {
+                'red': 'bg-red-50 border-red-200 hover:bg-red-100',
+                'yellow': 'bg-yellow-50 border-yellow-200 hover:bg-yellow-100',
+                'blue': 'bg-blue-50 border-blue-200 hover:bg-blue-100',
+            };
+
+            if (actions.length === 0) {
+                actionsHtml = '<p class="text-sm text-gray-400 light:text-gray-500">No quick actions available.</p>';
+            }
+
+            actions.forEach(action => {
+                const colorClass = colorClasses[action.color] || 'bg-gray-50 border-gray-200 hover:bg-gray-100';
+                // Enhanced colors for better dark mode readability
+                const textColorClass = action.color === 'red' ? 'text-gray-900 light:text-gray-900' :
+                                       action.color === 'yellow' ? 'text-gray-900 light:text-gray-900' :
+                                       'text-gray-900 light:text-gray-900';
+                const iconColorClass = action.color === 'red' ? 'text-red-700 light:text-gray-700' :
+                                       action.color === 'yellow' ? 'text-yellow-700 light:text-gray-700' :
+                                       'text-blue-700 light:text-gray-700';
+
+                actionsHtml += `
+                    <button onclick="sendPrompt(this, '${action.prompt}')"
+                            class="quick-action-btn ${colorClass} border-2 rounded-lg p-3 text-left transition-all duration-200 hover:shadow-md w-full">
+                        <div class="flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <i class="fas ${action.icon} ${iconColorClass} text-lg"></i>
+                                <span class="text-sm font-medium ${textColorClass}">${action.label}</span>
+                            </div>
+                            <i class="fas fa-paper-plane text-gray-600 light:text-gray-400 text-sm"></i>
+                        </div>
+                    </button>
+                `;
+            });
+
+            const html = `
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-sm font-semibold text-gray-100 light:text-gray-900">
+                        <i class="fas fa-bolt text-blue-500 mr-2"></i>Quick Actions
+                    </h3>
+                    <span class="text-xs text-gray-400 light:text-gray-500">Click to send prompt to agent</span>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    ${actionsHtml}
+                </div>
+            `;
+            document.getElementById('quick-actions').innerHTML = html;
+        }
+
+        function renderAnalytics() {
+            const stageStats = (data.stage_stats && typeof data.stage_stats === 'object') ? data.stage_stats : {};
+            const errorStats = (data.error_stats && typeof data.error_stats === 'object') ? data.error_stats : {};
+            const priorityAlerts = getSafeArray(data.priority_alerts);
+
+            // Render stage performance chart
+            let stageChartHtml = '';
+            const stages = {
+                'data_acquisition': { label: 'Data Acquisition', color: '#10b981' },
+                'initial_outreach': { label: 'Initial Outreach', color: '#3b82f6' },
+                'data_preparation': { label: 'Data Preparation', color: '#f59e0b' },
+                'lead_scoring': { label: 'Lead Scoring', color: '#8b5cf6' }
+            };
+
+            const maxTime = Math.max(...Object.keys(stages).map(s => getSafeNumber(stageStats[s]?.avg_seconds)), 1);
+
+            Object.keys(stages).forEach(stageKey => {
+                const stage = stages[stageKey];
+                const avg = getSafeNumber(stageStats[stageKey]?.avg_seconds);
+                const widthPct = (avg / maxTime * 100);
+
+                stageChartHtml += `
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-gray-300 light:text-gray-700">${stage.label}</span>
+                            <span class="text-gray-400 light:text-gray-600">${avg}s avg</span>
+                        </div>
+                        <div class="w-full bg-gray-200 rounded-full h-8 relative overflow-hidden">
+                            <div class="h-8 rounded-full flex items-center px-3 text-white text-xs font-medium transition-all duration-500"
+                                 style="width: ${widthPct}%; background-color: ${stage.color};">
+                                ${avg}s
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            // Render stage performance table
+            let stageTableHtml = '';
+            Object.keys(stages).forEach(stageKey => {
+                const stage = stages[stageKey];
+                const avg = getSafeNumber(stageStats[stageKey]?.avg_seconds);
+                stageTableHtml += `
+                    <div class="flex justify-between py-2 border-b border-gray-700 light:border-gray-100">
+                        <span class="text-xs text-gray-300 light:text-gray-600">${stage.label}</span>
+                        <span class="text-xs font-medium text-green-400 light:text-green-700">${avg}s avg</span>
+                    </div>
+                `;
+            });
+
+            // Render priority alerts
+            let alertsHtml = '<p class="text-xs text-gray-400 light:text-gray-500">No alerts</p>';
+            if (priorityAlerts.length > 0) {
+                alertsHtml = '';
+                priorityAlerts.forEach(alert => {
+                    const iconClass = alert.type === 'warning' ? 'fa-exclamation-triangle' : 'fa-info-circle';
+                    const bgColor = alert.type === 'warning' ? 'bg-yellow-50 border-yellow-200' : 'bg-blue-50 border-blue-200';
+                    const iconColor = alert.type === 'warning' ? 'text-yellow-600' : 'text-blue-600';
+
+                    alertsHtml += `
+                        <div class="flex items-start p-3 ${bgColor} border rounded-lg">
+                            <i class="fas ${iconClass} ${iconColor} mt-0.5 mr-2"></i>
+                            <div class="flex-1">
+                                <p class="text-xs font-medium text-gray-100 light:text-gray-900">${alert.title}</p>
+                                <p class="text-xs text-gray-400 light:text-gray-600 mt-1">${alert.description}</p>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            // Render error stats chart
+            const successPct = getSafeNumber(errorStats.success_pct);
+            const warningPct = getSafeNumber(errorStats.warning_pct);
+            const errorPct = getSafeNumber(errorStats.error_pct);
+
+            const errorChartHtml = `
+                <div class="flex flex-col items-center">
+                    <div class="relative w-32 h-32 mb-4">
+                        <svg viewBox="0 0 100 100" class="transform -rotate-90">
+                            <circle cx="50" cy="50" r="40" fill="none" stroke="#10b981" stroke-width="20"
+                                    stroke-dasharray="${successPct * 2.51} 251" stroke-dashoffset="0"/>
+                            <circle cx="50" cy="50" r="40" fill="none" stroke="#f59e0b" stroke-width="20"
+                                    stroke-dasharray="${warningPct * 2.51} 251" stroke-dashoffset="-${successPct * 2.51}"/>
+                            <circle cx="50" cy="50" r="40" fill="none" stroke="#ef4444" stroke-width="20"
+                                    stroke-dasharray="${errorPct * 2.51} 251" stroke-dashoffset="-${(successPct + warningPct) * 2.51}"/>
+                        </svg>
+                    </div>
+                    <div class="w-full space-y-2">
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center gap-2">
+                                <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                                <span class="text-xs text-gray-300 light:text-gray-700">Success</span>
+                            </div>
+                            <span class="text-xs font-medium text-gray-100 light:text-gray-900">${successPct}%</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center gap-2">
+                                <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
+                                <span class="text-xs text-gray-300 light:text-gray-700">Warning</span>
+                            </div>
+                            <span class="text-xs font-medium text-gray-100 light:text-gray-900">${warningPct}%</span>
+                        </div>
+                        <div class="flex justify-between items-center">
+                            <div class="flex items-center gap-2">
+                                <div class="w-3 h-3 rounded-full bg-red-500"></div>
+                                <span class="text-xs text-gray-300 light:text-gray-700">Error</span>
+                            </div>
+                            <span class="text-xs font-medium text-gray-100 light:text-gray-900">${errorPct}%</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+
+            const html = `
+                <div class="lg:col-span-2 theme-card rounded-lg shadow-sm p-4 border theme-border">
+                    <h3 class="text-sm font-semibold text-gray-100 light:text-gray-900 mb-4">AI Stage Runtime Performance</h3>
+                    <div class="space-y-4">${stageChartHtml}</div>
+                    <div class="mt-4 pt-4 border-t border-gray-700 light:border-gray-200">
+                        <h4 class="text-xs font-semibold text-gray-200 light:text-gray-700 mb-2">AI Stage Performance</h4>
+                        <div class="grid grid-cols-2 gap-3">${stageTableHtml}</div>
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <div class="theme-card rounded-lg shadow-sm p-4 border theme-border">
+                        <h3 class="text-sm font-semibold text-gray-100 light:text-gray-900 mb-3">Priority Alerts</h3>
+                        <div class="space-y-2">${alertsHtml}</div>
+                    </div>
+                    <div class="theme-card rounded-lg shadow-sm p-4 border theme-border">
+                        <h3 class="text-sm font-semibold text-gray-100 light:text-gray-900 mb-3">Output Validation & Errors</h3>
+                        ${errorChartHtml}
+                    </div>
+                </div>
+            `;
+            document.getElementById('analytics').innerHTML = html;
+        }
+
+        // Track which settings/product details are shown (key -> boolean)
+        const settingsDetailsState = {};
+        const productDetailsState = {};
+
+        function toggleSettingDetail(settingKey) {
+            settingsDetailsState[settingKey] = !settingsDetailsState[settingKey];
+            const detailEl = document.getElementById(`setting-detail-${settingKey}`);
+            const toggleBtn = document.getElementById(`toggle-btn-${settingKey}`);
+
+            if (detailEl) {
+                detailEl.classList.toggle('hidden', !settingsDetailsState[settingKey]);
+            }
+            if (toggleBtn) {
+                toggleBtn.innerHTML = settingsDetailsState[settingKey]
+                    ? '<i class="fas fa-eye-slash text-xs"></i>'
+                    : '<i class="fas fa-eye text-xs"></i>';
+            }
+        }
+
+        function toggleProductDetail(productId) {
+            productDetailsState[productId] = !productDetailsState[productId];
+            const detailEl = document.getElementById(`product-detail-${productId}`);
+            const toggleBtn = document.getElementById(`product-toggle-btn-${productId}`);
+
+            if (detailEl) {
+                detailEl.classList.toggle('hidden', !productDetailsState[productId]);
+            }
+            if (toggleBtn) {
+                toggleBtn.innerHTML = productDetailsState[productId]
+                    ? '<i class="fas fa-eye-slash text-xs"></i>'
+                    : '<i class="fas fa-eye text-xs"></i>';
+            }
+        }
+
+        // Auto-expand configured settings
+        function autoExpandConfiguredSettings() {
+            // Auto-expand all configured settings
+            Object.keys(settingsDetailsState).forEach(key => {
+                if (settingsDetailsState[key] === true) {
+                    const detailEl = document.getElementById(`setting-detail-${key}`);
+                    if (detailEl) {
+                        detailEl.classList.remove('hidden');
+                    }
+                }
+            });
+        }
+
+        function formatSettingDetails(settingKey, settingsData) {
+            const settings = getSafeObject(settingsData);
+            let html = '';
+
+            // Debug logging
+            console.log('formatSettingDetails called:', {settingKey, settings});
+
+            switch(settingKey) {
+                case 'org_profile_configured':
+                    const orgData = getSafeArray(settings.gs_team_organization);
+                    console.log('Organization data:', orgData);
+                    if (orgData.length > 0) {
+                        const org = orgData[0];
+                        html = `
+                            <div class="grid grid-cols-2 gap-2 text-xs">
+                                <div><span class="text-gray-400 light:text-gray-600">Organization Name:</span> <span class="text-gray-200 light:text-gray-800 font-medium">${org.org_name || org.legal_name || 'N/A'}</span></div>
+                                <div><span class="text-gray-400 light:text-gray-600">Industry:</span> <span class="text-gray-200 light:text-gray-800">${org.industry || 'N/A'}</span></div>
+                                <div><span class="text-gray-400 light:text-gray-600">Website:</span> <span class="text-gray-200 light:text-gray-800">${org.website || 'N/A'}</span></div>
+                                <div><span class="text-gray-400 light:text-gray-600">Description:</span> <span class="text-gray-200 light:text-gray-800">${org.description || 'N/A'}</span></div>
+                                ${org.value_proposition ? `<div class="col-span-2"><span class="text-gray-400 light:text-gray-600">Value Proposition:</span> <span class="text-gray-200 light:text-gray-800">${org.value_proposition}</span></div>` : ''}
+                            </div>
+                        `;
+                    } else {
+                        html = '<p class="text-xs text-gray-400 light:text-gray-500">No organization data configured</p>';
+                    }
+                    break;
+
+                case 'sales_rep_configured':
+                    const repsData = getSafeArray(settings.gs_team_rep);
+                    console.log('Sales reps data:', repsData);
+                    if (repsData.length > 0) {
+                        html = '<div class="space-y-2">';
+                        repsData.forEach((rep, idx) => {
+                            html += `
+                                <div class="p-2 bg-gray-800/40 light:bg-gray-50 rounded border border-gray-700 light:border-gray-200">
+                                    <div class="grid grid-cols-2 gap-2 text-xs">
+                                        <div><span class="text-gray-400 light:text-gray-600">Name:</span> <span class="text-gray-200 light:text-gray-800 font-medium">${rep.name || 'N/A'}</span></div>
+                                        <div><span class="text-gray-400 light:text-gray-600">Email:</span> <span class="text-gray-200 light:text-gray-800">${rep.email || 'N/A'}</span></div>
+                                        <div><span class="text-gray-400 light:text-gray-600">Title:</span> <span class="text-gray-200 light:text-gray-800">${rep.title || 'N/A'}</span></div>
+                                        <div><span class="text-gray-400 light:text-gray-600">Phone:</span> <span class="text-gray-200 light:text-gray-800">${rep.phone || 'N/A'}</span></div>
+                                        ${rep.linkedin_url ? `<div class="col-span-2"><span class="text-gray-400 light:text-gray-600">LinkedIn:</span> <a href="${rep.linkedin_url}" target="_blank" class="text-blue-400 light:text-blue-600 hover:underline">${rep.linkedin_url}</a></div>` : ''}
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        html += '</div>';
+                    } else {
+                        html = '<p class="text-xs text-gray-400 light:text-gray-500">No sales representative data configured</p>';
+                    }
+                    break;
+
+                case 'product_configured':
+                    const productsData = getSafeArray(settings.gs_team_product);
+                    console.log('Products data:', productsData);
+                    if (productsData.length > 0) {
+                        html = '<div class="space-y-2">';
+                        productsData.forEach((product) => {
+                            html += `
+                                <div class="p-2 bg-gray-800/40 light:bg-gray-50 rounded border border-gray-700 light:border-gray-200">
+                                    <div class="grid grid-cols-2 gap-2 text-xs">
+                                        <div><span class="text-gray-400 light:text-gray-600">Product ID:</span> <span class="text-gray-200 light:text-gray-800 font-medium">${product.product_id || 'N/A'}</span></div>
+                                        <div><span class="text-gray-400 light:text-gray-600">Product Name:</span> <span class="text-gray-200 light:text-gray-800">${product.product_name || 'N/A'}</span></div>
+                                        ${product.description ? `<div class="col-span-2"><span class="text-gray-400 light:text-gray-600">Description:</span> <span class="text-gray-200 light:text-gray-800">${product.description}</span></div>` : ''}
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        html += '</div>';
+                    } else {
+                        html = '<p class="text-xs text-gray-400 light:text-gray-500">No product data configured</p>';
+                    }
+                    break;
+
+                case 'automation_configured':
+                    // Handle auto_interaction as array
+                    const autoDataArray = getSafeArray(settings.gs_team_auto_interaction);
+                    console.log('Auto interaction data:', autoDataArray);
+
+                    if (autoDataArray.length > 0) {
+                        html = '<div class="space-y-2">';
+                        autoDataArray.forEach((autoItem, idx) => {
+                            html += `
+                                <div class="p-2 bg-gray-800/40 light:bg-gray-50 rounded border border-gray-700 light:border-gray-200">
+                                    <div class="grid grid-cols-2 gap-2 text-xs">
+                                        <div><span class="text-gray-400 light:text-gray-600">Tool Type:</span> <span class="text-gray-200 light:text-gray-800 font-medium">${autoItem.tool_type || 'N/A'}</span></div>
+                                        <div><span class="text-gray-400 light:text-gray-600">From Email:</span> <span class="text-gray-200 light:text-gray-800">${autoItem.from_email || 'N/A'}</span></div>
+                                        <div><span class="text-gray-400 light:text-gray-600">From Name:</span> <span class="text-gray-200 light:text-gray-800">${autoItem.from_name || 'N/A'}</span></div>
+                                        <div><span class="text-gray-400 light:text-gray-600">From Number:</span> <span class="text-gray-200 light:text-gray-800">${autoItem.from_number || 'N/A'}</span></div>
+                                        ${autoItem.email_cc ? `<div><span class="text-gray-400 light:text-gray-600">Email CC:</span> <span class="text-gray-200 light:text-gray-800">${autoItem.email_cc}</span></div>` : ''}
+                                        ${autoItem.email_bcc ? `<div><span class="text-gray-400 light:text-gray-600">Email BCC:</span> <span class="text-gray-200 light:text-gray-800">${autoItem.email_bcc}</span></div>` : ''}
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        html += '</div>';
+                    } else {
+                        html = '<p class="text-xs text-gray-400 light:text-gray-500">No automation data configured</p>';
+                    }
+                    break;
+
+                // Additional settings beyond the 4 required ones
+                case 'initial_outreach':
+                    const outreachData = getSafeObject(settings.gs_team_initial_outreach);
+                    console.log('Initial outreach data:', outreachData);
+                    if (Object.keys(outreachData).length > 0) {
+                        html = `
+                            <div class="grid grid-cols-2 gap-2 text-xs">
+                                <div><span class="text-gray-400 light:text-gray-600">Default Tone:</span> <span class="text-gray-200 light:text-gray-800 font-medium">${outreachData.default_tone || 'N/A'}</span></div>
+                                <div><span class="text-gray-400 light:text-gray-600">Few Shots:</span> <span class="text-gray-200 light:text-gray-800">${outreachData.fewshots ? 'Enabled' : 'Disabled'}</span></div>
+                                <div><span class="text-gray-400 light:text-gray-600">Strict Follow:</span> <span class="text-gray-200 light:text-gray-800">${outreachData.fewshots_strict_follow ? 'Yes' : 'No'}</span></div>
+                                <div><span class="text-gray-400 light:text-gray-600">Templates Count:</span> <span class="text-gray-200 light:text-gray-800">${outreachData.template_examples?.length || 0}</span></div>
+                                ${outreachData.max_drafts ? `<div><span class="text-gray-400 light:text-gray-600">Max Drafts:</span> <span class="text-gray-200 light:text-gray-800">${outreachData.max_drafts}</span></div>` : ''}
+                                ${outreachData.fewshots_location ? `<div class="col-span-2"><span class="text-gray-400 light:text-gray-600">Template File:</span> <span class="text-gray-200 light:text-gray-800">${outreachData.fewshots_location}</span></div>` : ''}
+                            </div>
+                        `;
+
+                        // If fewshots_location exists, add a button to view file content
+                        if (outreachData.fewshots_location) {
+                            // Ensure it's a string and escape for safe insertion into onclick
+                            const fileLocation = String(outreachData.fewshots_location);
+                            const escapedPath = fileLocation.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                            html += `
+                                <div class="mt-3 pt-3 border-t border-gray-700 light:border-gray-200">
+                                    <button onclick="sendPrompt(this, 'Use tool @FS-File-Read to read file: ${escapedPath}')"
+                                            class="px-3 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-200">
+                                        <i class="fas fa-file-alt mr-1"></i>View Template File
+                                    </button>
+                                    <p class="text-xs text-gray-400 light:text-gray-600 mt-1">File: <code class="text-gray-300 light:text-gray-700">${fileLocation}</code></p>
+                                </div>
+                            `;
+                        }
+                    } else {
+                        html = '<p class="text-xs text-gray-400 light:text-gray-500">No initial outreach settings configured</p>';
+                    }
+                    break;
+
+                case 'follow_up':
+                    const followUpData = getSafeObject(settings.gs_team_follow_up);
+                    console.log('Follow-up data:', followUpData);
+                    if (Object.keys(followUpData).length > 0) {
+                        html = `
+                            <div class="grid grid-cols-2 gap-2 text-xs">
+                                <div><span class="text-gray-400 light:text-gray-600">Max Follow-ups:</span> <span class="text-gray-200 light:text-gray-800 font-medium">${followUpData.max_follow_ups ?? 'N/A'}</span></div>
+                                <div><span class="text-gray-400 light:text-gray-600">Days Between:</span> <span class="text-gray-200 light:text-gray-800">${followUpData.days_between_follow_ups ?? 'N/A'}</span></div>
+                                <div><span class="text-gray-400 light:text-gray-600">Tone:</span> <span class="text-gray-200 light:text-gray-800">${followUpData.tone || 'N/A'}</span></div>
+                                ${followUpData.enabled !== undefined ? `<div><span class="text-gray-400 light:text-gray-600">Enabled:</span> <span class="text-gray-200 light:text-gray-800">${followUpData.enabled ? 'Yes' : 'No'}</span></div>` : ''}
+                            </div>
+                        `;
+                    } else {
+                        html = '<p class="text-xs text-gray-400 light:text-gray-500">No follow-up settings configured</p>';
+                    }
+                    break;
+
+                default:
+                    // Try to display any other settings dynamically
+                    const settingData = settings[`gs_team_${settingKey.replace('_configured', '')}`];
+                    if (settingData) {
+                        html = `<pre class="text-xs text-gray-200 light:text-gray-700 overflow-x-auto">${JSON.stringify(settingData, null, 2)}</pre>`;
+                    }
+                    break;
+            }
+
+            return html || '<p class="text-xs text-gray-400 light:text-gray-500">No details available</p>';
+        }
+
+        function getAdditionalConfigItems(settingsData) {
+            const settings = getSafeObject(settingsData);
+            const additionalItems = [];
+
+            // Check for initial outreach settings
+            if (settings.gs_team_initial_outreach && Object.keys(getSafeObject(settings.gs_team_initial_outreach)).length > 0) {
+                additionalItems.push({
+                    key: 'initial_outreach',
+                    label: 'Initial Outreach Settings',
+                    icon: 'fa-envelope',
+                    configured: true
+                });
+            }
+
+            // Check for follow-up settings
+            if (settings.gs_team_follow_up && Object.keys(getSafeObject(settings.gs_team_follow_up)).length > 0) {
+                additionalItems.push({
+                    key: 'follow_up',
+                    label: 'Follow-up Settings',
+                    icon: 'fa-reply-all',
+                    configured: true
+                });
+            }
+
+            // You can add more checks for other settings here
+            // Example: gs_team_scoring, gs_team_knowledge, etc.
+
+            return additionalItems;
+        }
+
+        function renderTabs() {
+            try {
+                const products = normalizeProducts(data.products);
+                const processes = normalizeProcesses(data.processes);
+                const configItems = normalizeConfigItems(data.config_items);
+                const settingsData = getSafeObject(data.settings);
+                const statusColor = getSafeString(data.status_color, 'yellow');
+                const statusText = getSafeString(data.status_text, 'Setup Required');
+
+                console.log('Rendering tabs with:', {products: products.length, processes: processes.length, configItems: configItems.length});
+
+                // Get additional config items beyond the required 4
+                const additionalConfigItems = getAdditionalConfigItems(settingsData);
+
+            // Render products
+            let productsHtml = '';
+            if (products.length === 0) {
+                productsHtml = `
+                    <p class="text-sm text-gray-200 light:text-gray-500 mb-3">No products in catalog.</p>
+                    <button onclick="sendPrompt(this, 'Use tool @FS-Product-Create to create a product.')"
+                            class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-md transition-colors duration-200 flex items-center gap-2">
+                        <i class="fas fa-plus"></i>
+                        <span>Create Product</span>
+                    </button>
+                `;
+            } else {
+                products.forEach((product, idx) => {
+                    const isLinked = Boolean(product.linked);
+                    const productId = `product-${idx}`;
+                    const bgColor = isLinked ? 'bg-green-50' : 'bg-yellow-50';
+                    const borderColor = isLinked ? 'border-green-200' : 'border-yellow-200';
+                    const badge = isLinked ? '<span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">Linked</span>' : '<span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">Not Linked</span>';
+
+                    // Escape quotes for safe use in onclick handlers
+                    const escapedName = String(product.name).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+
+                    productsHtml += `
+                        <div class="space-y-2">
+                            <div class="flex items-center justify-between p-3 rounded-lg bg-gray-800/60 light:bg-white border border-gray-700 light:border-gray-200">
+                                <div class="flex-1">
+                                    <p class="text-sm font-medium text-gray-100 light:text-gray-900">${product.name}</p>
+                                    <p class="text-xs text-gray-400 light:text-gray-600">$${getSafeNumber(product.price).toFixed(2)}</p>
+                                </div>
+                                <div class="flex items-center gap-2">
+                                    ${badge}
+                                    <button id="product-toggle-btn-${productId}" onclick="toggleProductDetail('${productId}')" class="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 light:bg-gray-200 light:hover:bg-gray-300 text-white light:text-gray-800 rounded-md transition-colors duration-200"><i class="fas fa-eye text-xs"></i></button>
+                                    ${isLinked ? '' : `<button onclick="sendPrompt(this, 'Use tool @FS-TeamSettings-Update to link ${escapedName} in Sales Settings.')" class="px-2 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-200"><i class="fas fa-link text-xs"></i></button>`}
+                                </div>
+                            </div>
+                            <div id="product-detail-${productId}" class="hidden ml-3 pl-3 pr-3 pb-3 pt-2 bg-gray-900/40 light:bg-gray-50 border-l-2 ${borderColor} rounded">
+                                <div class="grid grid-cols-2 gap-2 text-xs">
+                                    <div><span class="text-gray-400 light:text-gray-600">Product Name:</span> <span class="text-gray-200 light:text-gray-800 font-medium">${product.name}</span></div>
+                                    <div><span class="text-gray-400 light:text-gray-600">Price:</span> <span class="text-gray-200 light:text-gray-800">$${getSafeNumber(product.price).toFixed(2)}</span></div>
+                                    <div><span class="text-gray-400 light:text-gray-600">Status:</span> <span class="text-gray-200 light:text-gray-800">${isLinked ? 'Linked to Workspace' : 'Not Linked'}</span></div>
+                                </div>
+                                <div class="mt-2 pt-2 border-t border-gray-700 light:border-gray-200">
+                                    <button onclick="sendPrompt(this, 'Use tool @FS-Product-View to view full product details for ${escapedName}.')" class="px-3 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-200">
+                                        <i class="fas fa-file-alt mr-1"></i>View Full Details
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            // Render processes
+            let processesHtml = '';
+            if (processes.length === 0) {
+                processesHtml = `
+                    <p class="text-sm text-gray-200 light:text-gray-500 mb-3">No recent processes.</p>
+                    <button onclick="sendPrompt(this, 'Use tool @FS-Process-Create to start a sales process.')"
+                            class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-md transition-colors duration-200 flex items-center gap-2">
+                        <i class="fas fa-rocket"></i>
+                        <span>Start Process</span>
+                    </button>
+                `;
+            } else {
+                const statusColors = {
+                    'completed': 'bg-green-100 text-green-800',
+                    'running': 'bg-blue-100 text-blue-800',
+                    'pending': 'bg-yellow-100 text-yellow-800',
+                    'in_progress': 'bg-blue-100 text-blue-800',
+                    'failed': 'bg-red-100 text-red-800',
+                };
+
+                processes.forEach(process => {
+                    const statusColor = statusColors[process.status] || 'bg-gray-100 text-gray-800';
+                    processesHtml += `
+                        <div class="flex items-center justify-between p-3 bg-gray-800/60 light:bg-gray-50 border border-gray-700 light:border-gray-200 rounded-lg">
+                            <div class="flex-1">
+                                <p class="text-sm font-medium text-gray-100 light:text-gray-900">${process.customer_display}</p>
+                                <p class="text-xs text-gray-400 light:text-gray-600">ID: ${process.task_id_short}</p>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <span class="text-xs ${statusColor} px-2 py-1 rounded-full">${process.status}</span>
+                                <button onclick="sendPrompt(this, 'Use tool @FS-Process-Query to query sales process with task_id: ${process.task_id}.')" class="px-2 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-200"><i class="fas fa-eye text-xs"></i></button>
+                                <button onclick="sendPrompt(this, 'Use tool @FS-Process-Query to view sales process details for task_id: ${process.task_id}.')" class="px-2 py-1 text-xs bg-gray-600 hover:bg-gray-700 text-white rounded-md transition-colors duration-200"><i class="fas fa-file-alt text-xs"></i></button>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            // Render config checklist
+            let checklistHtml = '';
+
+            // Sort config items: unconfigured required settings first, then configured, then additional
+            const sortedConfigItems = [...configItems].sort((a, b) => {
+                // Unconfigured items first
+                if (!a.configured && b.configured) return -1;
+                if (a.configured && !b.configured) return 1;
+                return 0;
+            });
+
+            // Combine sorted required and additional config items
+            const allConfigItems = [...sortedConfigItems, ...additionalConfigItems];
+
+            if (allConfigItems.length === 0) {
+                checklistHtml = '<p class="text-sm text-gray-400 light:text-gray-500">No configuration items available.</p>';
+            }
+
+            // Add separator if we have both required and additional items
+            let hasAddedSeparator = false;
+
+            allConfigItems.forEach((item, index) => {
+                // Add separator before additional items
+                if (!hasAddedSeparator && index === sortedConfigItems.length && additionalConfigItems.length > 0) {
+                    checklistHtml += `
+                        <div class="my-4 pt-3 border-t border-gray-700 light:border-gray-200">
+                            <p class="text-xs font-semibold text-gray-300 light:text-gray-700 mb-3">Additional Settings</p>
+                        </div>
+                    `;
+                    hasAddedSeparator = true;
+                }
+
+                // Render item
+                const itemToRender = item;
+                item = itemToRender;
+
+                // Auto-expand configured items
+                if (item.configured) {
+                    settingsDetailsState[item.key] = true;
+                }
+                const isConfigured = item.configured;
+                const icon = isConfigured ? 'fa-check-circle' : 'fa-times-circle';
+                const iconColor = isConfigured ? 'text-green-600' : 'text-red-600';
+                const bgColor = isConfigured ? 'bg-green-900/30 light:bg-green-50' : 'bg-red-900/30 light:bg-red-50';
+                const borderColor = isConfigured ? 'border-green-700 light:border-green-200' : 'border-red-700 light:border-red-200';
+                const status = isConfigured ? 'Configured' : 'Not Configured';
+
+                // Pre-generate details HTML for configured items
+                let detailsHtml = '';
+                if (isConfigured) {
+                    detailsHtml = formatSettingDetails(item.key, settingsData);
+                }
+
+                // Show Fix button for unconfigured, Show Details button for configured
+                const actionBtn = !isConfigured ? `
+                    <button onclick="sendPrompt(this, '${item.prompt}')"
+                            class="ml-2 px-3 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-200 flex items-center gap-1">
+                        <i class="fas fa-paper-plane text-xs"></i>
+                        <span>Fix</span>
+                    </button>
+                ` : `
+                    <button id="toggle-btn-${item.key}" onclick="toggleSettingDetail('${item.key}')"
+                            class="ml-2 px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 light:bg-gray-200 light:hover:bg-gray-300 text-white light:text-gray-800 rounded-md transition-colors duration-200">
+                        <i class="fas fa-eye-slash text-xs"></i>
+                    </button>
+                `;
+
+                checklistHtml += `
+                    <div class="space-y-2">
+                        <div class="flex items-center p-3 ${bgColor} border ${borderColor} rounded-lg">
+                            <i class="fas ${item.icon} text-gray-300 light:text-gray-600 mr-3"></i>
+                            <div class="flex-1">
+                                <p class="text-sm font-medium text-gray-100 light:text-gray-900">${item.label}</p>
+                                <p class="text-xs text-gray-400 light:text-gray-600">${status}</p>
+                            </div>
+                            <i class="fas ${icon} ${iconColor} text-xl"></i>
+                            ${actionBtn}
+                        </div>
+                        ${isConfigured ? `
+                        <div id="setting-detail-${item.key}" class="ml-3 pl-3 pr-3 pb-3 pt-2 bg-gray-900/40 light:bg-gray-50 border-l-2 ${borderColor} rounded">
+                            ${detailsHtml}
+                        </div>
+                        ` : ''}
+                    </div>
+                `;
+            });
+
+            const html = `
+                <div class="border-b border-gray-200">
+                    <nav class="flex space-x-6 px-4" aria-label="Tabs">
+                        <button class="tab-button border-fuse-green-500 text-fuse-green-600 py-3 px-1 border-b-2 font-medium text-sm" data-tab="products" onclick="switchTab('products')">
+                            <i class="fas fa-box mr-1"></i>Products
+                        </button>
+                        <button class="tab-button border-transparent text-gray-300 light:text-gray-500 hover:text-gray-400 light:hover:text-gray-700 py-3 px-1 border-b-2 font-medium text-sm" data-tab="processes" onclick="switchTab('processes')">
+                            <i class="fas fa-cogs mr-1"></i>Recent Processes
+                        </button>
+                        <button class="tab-button border-transparent text-gray-300 light:text-gray-500 hover:text-gray-400 light:hover:text-gray-700 py-3 px-1 border-b-2 font-medium text-sm" data-tab="configuration" onclick="switchTab('configuration')">
+                            <i class="fas fa-sliders-h mr-1"></i>Configuration
+                        </button>
+                    </nav>
+                </div>
+                <div class="p-4">
+                    <div id="products-content" class="tab-content">
+                        <h4 class="text-sm font-semibold text-gray-100 light:text-gray-900 mb-3">Product Catalog</h4>
+                        <div class="space-y-2">${productsHtml}</div>
+                    </div>
+                    <div id="processes-content" class="tab-content hidden">
+                        <h4 class="text-sm font-semibold text-gray-100 light:text-gray-900 mb-3">Recent Sales Processes</h4>
+                        <div class="space-y-2">${processesHtml}</div>
+                    </div>
+                    <div id="configuration-content" class="tab-content hidden">
+                        <div class="flex items-center justify-between mb-3">
+                            <div class="flex items-center gap-2">
+                                <h4 class="text-sm font-semibold text-gray-100 light:text-gray-900">Configuration Checklist</h4>
+                                <span class="text-xs bg-${statusColor}-100 text-${statusColor}-800 px-3 py-1 rounded-full font-medium">${statusText}</span>
+                            </div>
+                        </div>
+                        <p class="text-xs text-gray-400 light:text-gray-600 mb-3">Click the eye icon on configured items to view details.</p>
+                        <div id="config-checklist" class="space-y-3">${checklistHtml}</div>
+                    </div>
+                </div>
+            `;
+                document.getElementById('tabs').innerHTML = html;
+            } catch (error) {
+                console.error('Error rendering tabs:', error);
+                document.getElementById('tabs').innerHTML = `
+                    <div class="p-4 bg-red-900/30 light:bg-red-50 border border-red-700 light:border-red-200 rounded-lg">
+                        <p class="text-sm font-medium text-red-200 light:text-red-900 mb-2">Error rendering tabs</p>
+                        <p class="text-xs text-red-300 light:text-red-700">${error.message}</p>
+                        <p class="text-xs text-gray-400 light:text-gray-600 mt-2">Check browser console for details</p>
+                    </div>
+                `;
+            }
+        }
+
+        // Initialize dashboard on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            renderOrgName();
+            renderMetricsCards();
+            renderQuickActions();
+            renderAnalytics();
+            renderTabs();
+        });
+    </script>
+</body>
+</html>
