@@ -245,7 +245,7 @@ body {
             if (!draftId) {
                 return '';
             }
-            return `@FS-EmailDraft-Update Change selected draft to ${draftId}`;
+            return `Use tool @FS-EmailDraft-Update to change selected draft to ${draftId}.`;
         }
 
         function updateDraftSelectState() {
@@ -372,7 +372,7 @@ body {
         <button
             class="quick-action-btn"
             data-draft-id='{{ jsonPath($draft_data, "fields.drafts[0].draft_id") }}'
-            data-prompt='@FS-EmailDraft-Update rewrite draft {{ jsonPath($draft_data, "fields.drafts[0].draft_id") }} | manual update {{ jsonPath($draft_data, "fields.drafts[0].draft_id") }}'
+            data-prompt='Use tool @FS-EmailDraft-Update to rewrite draft {{ jsonPath($draft_data, "fields.drafts[0].draft_id") }}.'
             onclick="sendPrompt(this)"
             aria-label="Rewrite selected draft"
         >
@@ -387,7 +387,7 @@ body {
         <button
             class="quick-action-btn"
             data-draft-id='{{ jsonPath($draft_data, "fields.drafts[0].draft_id") }}'
-            data-prompt='@FS-EmailDraft-Update manual update {{ jsonPath($draft_data, "fields.drafts[0].draft_id") }}'
+            data-prompt='Use tool @FS-EmailDraft-Update to manually update draft {{ jsonPath($draft_data, "fields.drafts[0].draft_id") }}.'
             onclick="sendPrompt(this)"
             aria-label="Manual edit selected draft"
         >

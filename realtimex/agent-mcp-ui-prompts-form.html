@@ -155,9 +155,9 @@
       "title": "Workspace & Status",
       "description": "Check readiness and open the status surfaces.",
       "actions": [
-        { "id": "workspace-dashboard", "label": "Open Dashboard", "prompt": "@FS-Workspace-Dashboard", "flow": "FS-Workspace-Dashboard", "type": "button" },
-        { "id": "onboarding-checklist", "label": "Onboarding Checklist", "prompt": "@Fusesell-KnowledgeProvider provide the onboarding checklist", "flow": "Fusesell-KnowledgeProvider", "type": "button" },
-        { "id": "view-sales-settings", "label": "View Sales Settings", "prompt": "@FS-TeamSettings-View View Sales Settings.", "flow": "FS-TeamSettings-View", "type": "button" }
+        { "id": "workspace-dashboard", "label": "Open Dashboard", "prompt": "Use tool @FS-Workspace-Dashboard to open the workspace dashboard.", "flow": "FS-Workspace-Dashboard", "type": "button" },
+        { "id": "onboarding-checklist", "label": "Onboarding Checklist", "prompt": "Use tool @Fusesell-KnowledgeProvider to provide the onboarding checklist.", "flow": "Fusesell-KnowledgeProvider", "type": "button" },
+        { "id": "view-sales-settings", "label": "View Sales Settings", "prompt": "Use tool @FS-TeamSettings-View to view Sales Settings.", "flow": "FS-TeamSettings-View", "type": "button" }
       ]
     },
     {
@@ -165,7 +165,7 @@
       "title": "Products",
       "description": "Search or view product details.",
       "actions": [
-        { "id": "product-search", "label": "Search Product", "flow": "FS-Product-View", "type": "form", "prompt_template": "@FS-Product-View View product details for {product_name}.", "fields": [ { "name": "product_name", "label": "Product name", "placeholder": "Nimbus CRM" } ] }
+        { "id": "product-search", "label": "Search Product", "flow": "FS-Product-View", "type": "form", "prompt_template": "Use tool @FS-Product-View to view product details for {product_name}.", "fields": [ { "name": "product_name", "label": "Product name", "placeholder": "Nimbus CRM" } ] }
       ]
     },
     {
@@ -173,7 +173,7 @@
       "title": "Sales Settings",
       "description": "Review current sales settings.",
       "actions": [
-        { "id": "settings-view", "label": "View Sales Settings", "prompt": "@FS-TeamSettings-View View Sales Settings.", "flow": "FS-TeamSettings-View", "type": "button" }
+        { "id": "settings-view", "label": "View Sales Settings", "prompt": "Use tool @FS-TeamSettings-View to view Sales Settings.", "flow": "FS-TeamSettings-View", "type": "button" }
       ]
     },
     {
@@ -181,8 +181,8 @@
       "title": "Sales Processes",
       "description": "Start or query outreach workflows.",
       "actions": [
-        { "id": "process-start", "label": "Start Sales Process", "flow": "FS-Process-Create", "type": "form", "prompt_template": "@FS-Process-Create Start a sales process.\nCustomer name: {customer_name}.\nCustomer email: {customer_email}.\nWebsite: {website}.", "fields": [ { "name": "customer_name", "label": "Customer name", "placeholder": "Alex Morgan", "required": true }, { "name": "customer_email", "label": "Customer email", "placeholder": "alex@contoso.com", "required": true }, { "name": "website", "label": "Website", "placeholder": "contoso.com", "required": true } ] },
-        { "id": "process-query-customer", "label": "Query by Customer", "flow": "FS-Process-Query", "type": "form", "prompt_template": "@FS-Process-Query Query sales processes for customer {customer_name}. Status: {status}. Limit: {limit}.", "fields": [ { "name": "customer_name", "label": "Customer name", "placeholder": "Contoso" }, { "name": "status", "label": "Status", "placeholder": "open" }, { "name": "limit", "label": "Limit", "placeholder": "5" } ] }
+        { "id": "process-start", "label": "Start Sales Process", "flow": "FS-Process-Create", "type": "form", "prompt_template": "Use tool @FS-Process-Create to start a sales process.\nCustomer name: {customer_name}.\nCustomer email: {customer_email}.\nWebsite: {website}.", "fields": [ { "name": "customer_name", "label": "Customer name", "placeholder": "Alex Morgan", "required": true }, { "name": "customer_email", "label": "Customer email", "placeholder": "alex@contoso.com", "required": true }, { "name": "website", "label": "Website", "placeholder": "contoso.com", "required": true } ] },
+        { "id": "process-query-customer", "label": "Query by Customer", "flow": "FS-Process-Query", "type": "form", "prompt_template": "Use tool @FS-Process-Query to query sales processes for customer {customer_name}. Status: {status}. Limit: {limit}.", "fields": [ { "name": "customer_name", "label": "Customer name", "placeholder": "Contoso" }, { "name": "status", "label": "Status", "placeholder": "open" }, { "name": "limit", "label": "Limit", "placeholder": "5" } ] }
       ]
     }
   ]
