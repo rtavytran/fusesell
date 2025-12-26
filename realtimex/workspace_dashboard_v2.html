@@ -7,6 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
+            darkMode: 'class',
             theme: {
                 extend: {
                     colors: {
@@ -40,7 +41,7 @@
             --border: rgba(255, 255, 255, 0.1);
             --border-subtle: #3f3f46;
         }
-        body.light {
+        body:not(.dark) {
             --bg-primary: #ffffff;
             --bg-secondary: #f9fbfd;
             --bg-card: #ffffff;
@@ -79,8 +80,8 @@
     <main class="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6 py-4">
         <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
             <div>
-                <h1 class="text-2xl font-bold text-gray-100 light:text-gray-900" id="org-name">Loading...</h1>
-                <p class="text-sm text-gray-400 light:text-gray-600">Interactive workspace dashboard with quick actions</p>
+                <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100" id="org-name">Loading...</h1>
+                <p class="text-sm text-gray-600 dark:text-gray-400">Interactive workspace dashboard with quick actions</p>
             </div>
             <span class="text-xs bg-blue-100 text-blue-800 px-3 py-1 rounded-full font-medium">
                 <i class="fas fa-bolt mr-1"></i>Interactive Mode
@@ -130,7 +131,10 @@
         // Parent communication helpers (RealtimeX embedding)
         function applyTheme(theme) {
             document.body.classList.remove('light', 'dark');
-            document.body.classList.add(theme === 'light' ? 'light' : 'dark');
+            if (theme === 'dark') {
+                document.body.classList.add('dark');
+            }
+            // Light theme is default, no class needed
         }
 
         function send(type, payload) {
@@ -191,7 +195,9 @@
                 icon: getSafeString(action.icon, 'fa-bolt'),
                 label: getSafeString(action.label, 'Action'),
                 prompt: getSafeString(action.prompt, ''),
+                prompt_template: getSafeString(action.prompt_template, ''),
                 color: getSafeString(action.color, 'blue'),
+                fields: getSafeArray(action.fields),
             }));
         }
 
@@ -273,11 +279,11 @@
             document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
             document.querySelectorAll('.tab-button').forEach(b => {
                 b.classList.remove('border-fuse-green-500', 'text-fuse-green-600');
-                b.classList.add('border-transparent', 'text-gray-500');
+                b.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'dark:text-gray-300', 'dark:hover:text-gray-400');
             });
             document.getElementById(tabName + '-content').classList.remove('hidden');
             const activeButton = document.querySelector(`[data-tab="${tabName}"]`);
-            activeButton.classList.remove('border-transparent', 'text-gray-500');
+            activeButton.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'dark:text-gray-300', 'dark:hover:text-gray-400');
             activeButton.classList.add('border-fuse-green-500', 'text-fuse-green-600');
         }
 
@@ -289,7 +295,7 @@
         function renderMetricsCards() {
             const statusColor = getSafeString(data.status_color, 'yellow');
             const html = `
-                <div class="bg-${statusColor}-50 light:bg-${statusColor}-50 rounded-lg shadow-sm p-4 border border-gray-200">
+                <div class="bg-${statusColor}-50 rounded-lg shadow-sm p-4 border border-gray-200">
                     <div class="flex items-center justify-between">
                         <div>
                             <p class="text-xs font-medium text-gray-800">${getSafeString('Setup Completion')}</p>
@@ -301,7 +307,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="bg-fuse-green-50 light:bg-fuse-green-50 rounded-lg shadow-sm p-4 border border-gray-200">
+                <div class="bg-fuse-green-50 rounded-lg shadow-sm p-4 border border-gray-200">
                     <div class="flex items-center justify-between">
                         <div>
                             <p class="text-xs font-medium text-gray-800">Active Processes</p>
@@ -313,7 +319,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="bg-fuse-green-50 light:bg-fuse-green-50 rounded-lg shadow-sm p-4 border border-gray-200">
+                <div class="bg-fuse-green-50 rounded-lg shadow-sm p-4 border border-gray-200">
                     <div class="flex items-center justify-between">
                         <div>
                             <p class="text-xs font-medium text-gray-800">Products in Catalog</p>
@@ -329,6 +335,51 @@
             document.getElementById('metrics-cards').innerHTML = html;
         }
 
+        // Track form visibility state
+        const formStates = {};
+
+        function toggleActionForm(actionId) {
+            formStates[actionId] = !formStates[actionId];
+            const formEl = document.getElementById(`action-form-${actionId}`);
+            const toggleBtn = document.getElementById(`action-toggle-${actionId}`);
+
+            if (formEl) {
+                formEl.classList.toggle('hidden', !formStates[actionId]);
+            }
+            if (toggleBtn) {
+                const icon = toggleBtn.querySelector('i');
+                if (icon) {
+                    icon.className = formStates[actionId] ? 'fas fa-chevron-up' : 'fas fa-chevron-down';
+                }
+            }
+        }
+
+        function buildFormPrompt(template, formId) {
+            const form = document.getElementById(formId);
+            if (!form) return template;
+
+            const inputs = form.querySelectorAll('input');
+            let prompt = template;
+            inputs.forEach(input => {
+                const value = input.value || '';
+                prompt = prompt.replace(new RegExp(`\\{${input.name}\\}`, 'g'), value);
+            });
+            return prompt;
+        }
+
+        function validateForm(formId, requiredFields) {
+            const form = document.getElementById(formId);
+            if (!form) return false;
+
+            for (const fieldName of requiredFields) {
+                const input = form.querySelector(`input[name="${fieldName}"]`);
+                if (!input || !input.value.trim()) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         function renderQuickActions() {
             const actions = normalizeQuickActions(data.quick_actions);
             let actionsHtml = '';
@@ -340,39 +391,86 @@
             };
 
             if (actions.length === 0) {
-                actionsHtml = '<p class="text-sm text-gray-400 light:text-gray-500">No quick actions available.</p>';
+                actionsHtml = '<p class="text-sm text-gray-500 dark:text-gray-400">No quick actions available.</p>';
             }
 
-            actions.forEach(action => {
+            actions.forEach((action, idx) => {
+                const actionId = `action-${idx}`;
                 const colorClass = colorClasses[action.color] || 'bg-gray-50 border-gray-200 hover:bg-gray-100';
-                // Enhanced colors for better dark mode readability
-                const textColorClass = action.color === 'red' ? 'text-gray-900 light:text-gray-900' :
-                                       action.color === 'yellow' ? 'text-gray-900 light:text-gray-900' :
-                                       'text-gray-900 light:text-gray-900';
-                const iconColorClass = action.color === 'red' ? 'text-red-700 light:text-gray-700' :
-                                       action.color === 'yellow' ? 'text-yellow-700 light:text-gray-700' :
-                                       'text-blue-700 light:text-gray-700';
+                const textColorClass = 'text-gray-900';
+                const iconColorClass = 'text-gray-700';
 
-                actionsHtml += `
-                    <button onclick="sendPrompt(this, '${action.prompt}')"
-                            class="quick-action-btn ${colorClass} border-2 rounded-lg p-3 text-left transition-all duration-200 hover:shadow-md w-full">
-                        <div class="flex items-center justify-between">
-                            <div class="flex items-center gap-3">
-                                <i class="fas ${action.icon} ${iconColorClass} text-lg"></i>
-                                <span class="text-sm font-medium ${textColorClass}">${action.label}</span>
+                // Determine if action needs a form
+                const hasForm = action.fields && action.fields.length > 0;
+                const requiredFields = hasForm ? action.fields.filter(f => f.required).map(f => f.name) : [];
+
+                if (hasForm) {
+                    // Render action with expandable form
+                    actionsHtml += `
+                        <div class="${colorClass} border-2 rounded-lg transition-all duration-200 w-full">
+                            <button id="action-toggle-${actionId}" onclick="toggleActionForm('${actionId}')"
+                                    class="w-full p-3 text-left flex items-center justify-between hover:shadow-md transition-shadow">
+                                <div class="flex items-center gap-3">
+                                    <i class="fas ${action.icon} ${iconColorClass} text-lg"></i>
+                                    <span class="text-sm font-medium ${textColorClass}">${action.label}</span>
+                                </div>
+                                <i class="fas fa-chevron-down text-gray-600 dark:text-gray-400 text-sm"></i>
+                            </button>
+
+                            <div id="action-form-${actionId}" class="hidden border-t border-gray-200 dark:border-gray-600 p-3 bg-white dark:bg-gray-800/40">
+                                <form id="form-${actionId}" onsubmit="event.preventDefault();">
+                                    ${action.fields.map(field => `
+                                        <div class="mb-3">
+                                            <label class="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                                                ${field.label}${field.required ? ' <span class="text-red-500">*</span>' : ''}
+                                            </label>
+                                            <input type="text"
+                                                   name="${field.name}"
+                                                   placeholder="${field.placeholder || ''}"
+                                                   ${field.required ? 'required' : ''}
+                                                   oninput="document.getElementById('submit-${actionId}').disabled = !validateForm('form-${actionId}', ${JSON.stringify(requiredFields)})"
+                                                   class="w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                                        </div>
+                                    `).join('')}
+                                    <div class="flex justify-end gap-2 mt-3">
+                                        <button type="button" onclick="toggleActionForm('${actionId}')"
+                                                class="px-3 py-2 text-xs font-medium text-gray-700 dark:text-gray-300 bg-gray-200 dark:bg-gray-700 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
+                                            <i class="fas fa-times mr-1"></i>Cancel
+                                        </button>
+                                        <button type="button" id="submit-${actionId}"
+                                                ${requiredFields.length > 0 ? 'disabled' : ''}
+                                                onclick="sendPrompt(this, buildFormPrompt('${action.prompt_template || action.prompt}', 'form-${actionId}'))"
+                                                class="px-3 py-2 text-xs font-medium text-white bg-blue-500 rounded-md hover:bg-blue-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                            <i class="fas fa-paper-plane mr-1"></i>Send
+                                        </button>
+                                    </div>
+                                </form>
                             </div>
-                            <i class="fas fa-paper-plane text-gray-600 light:text-gray-400 text-sm"></i>
                         </div>
-                    </button>
-                `;
+                    `;
+                } else {
+                    // Render simple button action
+                    actionsHtml += `
+                        <button onclick="sendPrompt(this, '${action.prompt}')"
+                                class="quick-action-btn ${colorClass} border-2 rounded-lg p-3 text-left transition-all duration-200 hover:shadow-md w-full">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center gap-3">
+                                    <i class="fas ${action.icon} ${iconColorClass} text-lg"></i>
+                                    <span class="text-sm font-medium ${textColorClass}">${action.label}</span>
+                                </div>
+                                <i class="fas fa-paper-plane text-gray-400 dark:text-gray-600 text-sm"></i>
+                            </div>
+                        </button>
+                    `;
+                }
             });
 
             const html = `
                 <div class="flex items-center justify-between mb-3">
-                    <h3 class="text-sm font-semibold text-gray-100 light:text-gray-900">
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100">
                         <i class="fas fa-bolt text-blue-500 mr-2"></i>Quick Actions
                     </h3>
-                    <span class="text-xs text-gray-400 light:text-gray-500">Click to send prompt to agent</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400">Click to send prompt or fill form</span>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     ${actionsHtml}
@@ -405,8 +503,8 @@
                 stageChartHtml += `
                     <div>
                         <div class="flex justify-between text-xs mb-1">
-                            <span class="text-gray-300 light:text-gray-700">${stage.label}</span>
-                            <span class="text-gray-400 light:text-gray-600">${avg}s avg</span>
+                            <span class="text-gray-700 dark:text-gray-300">${stage.label}</span>
+                            <span class="text-gray-600 dark:text-gray-400">${avg}s avg</span>
                         </div>
                         <div class="w-full bg-gray-200 rounded-full h-8 relative overflow-hidden">
                             <div class="h-8 rounded-full flex items-center px-3 text-white text-xs font-medium transition-all duration-500"
@@ -424,15 +522,15 @@
                 const stage = stages[stageKey];
                 const avg = getSafeNumber(stageStats[stageKey]?.avg_seconds);
                 stageTableHtml += `
-                    <div class="flex justify-between py-2 border-b border-gray-700 light:border-gray-100">
-                        <span class="text-xs text-gray-300 light:text-gray-600">${stage.label}</span>
-                        <span class="text-xs font-medium text-green-400 light:text-green-700">${avg}s avg</span>
+                    <div class="flex justify-between py-2 border-b border-gray-100 dark:border-gray-700">
+                        <span class="text-xs text-gray-600 dark:text-gray-300">${stage.label}</span>
+                        <span class="text-xs font-medium text-green-700 dark:text-green-400">${avg}s avg</span>
                     </div>
                 `;
             });
 
             // Render priority alerts
-            let alertsHtml = '<p class="text-xs text-gray-400 light:text-gray-500">No alerts</p>';
+            let alertsHtml = '<p class="text-xs text-gray-500 dark:text-gray-400">No alerts</p>';
             if (priorityAlerts.length > 0) {
                 alertsHtml = '';
                 priorityAlerts.forEach(alert => {
@@ -444,8 +542,8 @@
                         <div class="flex items-start p-3 ${bgColor} border rounded-lg">
                             <i class="fas ${iconClass} ${iconColor} mt-0.5 mr-2"></i>
                             <div class="flex-1">
-                                <p class="text-xs font-medium text-gray-100 light:text-gray-900">${alert.title}</p>
-                                <p class="text-xs text-gray-400 light:text-gray-600 mt-1">${alert.description}</p>
+                                <p class="text-xs font-medium text-gray-900 dark:text-gray-100">${alert.title}</p>
+                                <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">${alert.description}</p>
                             </div>
                         </div>
                     `;
@@ -473,23 +571,23 @@
                         <div class="flex justify-between items-center">
                             <div class="flex items-center gap-2">
                                 <div class="w-3 h-3 rounded-full bg-green-500"></div>
-                                <span class="text-xs text-gray-300 light:text-gray-700">Success</span>
+                                <span class="text-xs text-gray-700 dark:text-gray-300">Success</span>
                             </div>
-                            <span class="text-xs font-medium text-gray-100 light:text-gray-900">${successPct}%</span>
+                            <span class="text-xs font-medium text-gray-900 dark:text-gray-100">${successPct}%</span>
                         </div>
                         <div class="flex justify-between items-center">
                             <div class="flex items-center gap-2">
                                 <div class="w-3 h-3 rounded-full bg-yellow-500"></div>
-                                <span class="text-xs text-gray-300 light:text-gray-700">Warning</span>
+                                <span class="text-xs text-gray-700 dark:text-gray-300">Warning</span>
                             </div>
-                            <span class="text-xs font-medium text-gray-100 light:text-gray-900">${warningPct}%</span>
+                            <span class="text-xs font-medium text-gray-900 dark:text-gray-100">${warningPct}%</span>
                         </div>
                         <div class="flex justify-between items-center">
                             <div class="flex items-center gap-2">
                                 <div class="w-3 h-3 rounded-full bg-red-500"></div>
-                                <span class="text-xs text-gray-300 light:text-gray-700">Error</span>
+                                <span class="text-xs text-gray-700 dark:text-gray-300">Error</span>
                             </div>
-                            <span class="text-xs font-medium text-gray-100 light:text-gray-900">${errorPct}%</span>
+                            <span class="text-xs font-medium text-gray-900 dark:text-gray-100">${errorPct}%</span>
                         </div>
                     </div>
                 </div>
@@ -497,20 +595,20 @@
 
             const html = `
                 <div class="lg:col-span-2 theme-card rounded-lg shadow-sm p-4 border theme-border">
-                    <h3 class="text-sm font-semibold text-gray-100 light:text-gray-900 mb-4">AI Stage Runtime Performance</h3>
+                    <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-4">AI Stage Runtime Performance</h3>
                     <div class="space-y-4">${stageChartHtml}</div>
-                    <div class="mt-4 pt-4 border-t border-gray-700 light:border-gray-200">
-                        <h4 class="text-xs font-semibold text-gray-200 light:text-gray-700 mb-2">AI Stage Performance</h4>
+                    <div class="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                        <h4 class="text-xs font-semibold text-gray-700 dark:text-gray-200 mb-2">AI Stage Performance</h4>
                         <div class="grid grid-cols-2 gap-3">${stageTableHtml}</div>
                     </div>
                 </div>
                 <div class="space-y-4">
                     <div class="theme-card rounded-lg shadow-sm p-4 border theme-border">
-                        <h3 class="text-sm font-semibold text-gray-100 light:text-gray-900 mb-3">Priority Alerts</h3>
+                        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Priority Alerts</h3>
                         <div class="space-y-2">${alertsHtml}</div>
                     </div>
                     <div class="theme-card rounded-lg shadow-sm p-4 border theme-border">
-                        <h3 class="text-sm font-semibold text-gray-100 light:text-gray-900 mb-3">Output Validation & Errors</h3>
+                        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Output Validation & Errors</h3>
                         ${errorChartHtml}
                     </div>
                 </div>
@@ -580,15 +678,15 @@
                         const org = orgData[0];
                         html = `
                             <div class="grid grid-cols-2 gap-2 text-xs">
-                                <div><span class="text-gray-400 light:text-gray-600">Organization Name:</span> <span class="text-gray-200 light:text-gray-800 font-medium">${org.org_name || org.legal_name || 'N/A'}</span></div>
-                                <div><span class="text-gray-400 light:text-gray-600">Industry:</span> <span class="text-gray-200 light:text-gray-800">${org.industry || 'N/A'}</span></div>
-                                <div><span class="text-gray-400 light:text-gray-600">Website:</span> <span class="text-gray-200 light:text-gray-800">${org.website || 'N/A'}</span></div>
-                                <div><span class="text-gray-400 light:text-gray-600">Description:</span> <span class="text-gray-200 light:text-gray-800">${org.description || 'N/A'}</span></div>
-                                ${org.value_proposition ? `<div class="col-span-2"><span class="text-gray-400 light:text-gray-600">Value Proposition:</span> <span class="text-gray-200 light:text-gray-800">${org.value_proposition}</span></div>` : ''}
+                                <div><span class="text-gray-600 dark:text-gray-400">Organization Name:</span> <span class="text-gray-800 dark:text-gray-200 font-medium">${org.org_name || org.legal_name || 'N/A'}</span></div>
+                                <div><span class="text-gray-600 dark:text-gray-400">Industry:</span> <span class="text-gray-800 dark:text-gray-200">${org.industry || 'N/A'}</span></div>
+                                <div><span class="text-gray-600 dark:text-gray-400">Website:</span> <span class="text-gray-800 dark:text-gray-200">${org.website || 'N/A'}</span></div>
+                                <div><span class="text-gray-600 dark:text-gray-400">Description:</span> <span class="text-gray-800 dark:text-gray-200">${org.description || 'N/A'}</span></div>
+                                ${org.value_proposition ? `<div class="col-span-2"><span class="text-gray-600 dark:text-gray-400">Value Proposition:</span> <span class="text-gray-800 dark:text-gray-200">${org.value_proposition}</span></div>` : ''}
                             </div>
                         `;
                     } else {
-                        html = '<p class="text-xs text-gray-400 light:text-gray-500">No organization data configured</p>';
+                        html = '<p class="text-xs text-gray-500 dark:text-gray-400">No organization data configured</p>';
                     }
                     break;
 
@@ -599,20 +697,20 @@
                         html = '<div class="space-y-2">';
                         repsData.forEach((rep, idx) => {
                             html += `
-                                <div class="p-2 bg-gray-800/40 light:bg-gray-50 rounded border border-gray-700 light:border-gray-200">
+                                <div class="p-2 bg-gray-50 dark:bg-gray-800/40 rounded border border-gray-200 dark:border-gray-700">
                                     <div class="grid grid-cols-2 gap-2 text-xs">
-                                        <div><span class="text-gray-400 light:text-gray-600">Name:</span> <span class="text-gray-200 light:text-gray-800 font-medium">${rep.name || 'N/A'}</span></div>
-                                        <div><span class="text-gray-400 light:text-gray-600">Email:</span> <span class="text-gray-200 light:text-gray-800">${rep.email || 'N/A'}</span></div>
-                                        <div><span class="text-gray-400 light:text-gray-600">Title:</span> <span class="text-gray-200 light:text-gray-800">${rep.title || 'N/A'}</span></div>
-                                        <div><span class="text-gray-400 light:text-gray-600">Phone:</span> <span class="text-gray-200 light:text-gray-800">${rep.phone || 'N/A'}</span></div>
-                                        ${rep.linkedin_url ? `<div class="col-span-2"><span class="text-gray-400 light:text-gray-600">LinkedIn:</span> <a href="${rep.linkedin_url}" target="_blank" class="text-blue-400 light:text-blue-600 hover:underline">${rep.linkedin_url}</a></div>` : ''}
+                                        <div><span class="text-gray-600 dark:text-gray-400">Name:</span> <span class="text-gray-800 dark:text-gray-200 font-medium">${rep.name || 'N/A'}</span></div>
+                                        <div><span class="text-gray-600 dark:text-gray-400">Email:</span> <span class="text-gray-800 dark:text-gray-200">${rep.email || 'N/A'}</span></div>
+                                        <div><span class="text-gray-600 dark:text-gray-400">Title:</span> <span class="text-gray-800 dark:text-gray-200">${rep.title || 'N/A'}</span></div>
+                                        <div><span class="text-gray-600 dark:text-gray-400">Phone:</span> <span class="text-gray-800 dark:text-gray-200">${rep.phone || 'N/A'}</span></div>
+                                        ${rep.linkedin_url ? `<div class="col-span-2"><span class="text-gray-600 dark:text-gray-400">LinkedIn:</span> <a href="${rep.linkedin_url}" target="_blank" class="text-blue-600 dark:text-blue-400 hover:underline">${rep.linkedin_url}</a></div>` : ''}
                                     </div>
                                 </div>
                             `;
                         });
                         html += '</div>';
                     } else {
-                        html = '<p class="text-xs text-gray-400 light:text-gray-500">No sales representative data configured</p>';
+                        html = '<p class="text-xs text-gray-500 dark:text-gray-400">No sales representative data configured</p>';
                     }
                     break;
 
@@ -623,18 +721,18 @@
                         html = '<div class="space-y-2">';
                         productsData.forEach((product) => {
                             html += `
-                                <div class="p-2 bg-gray-800/40 light:bg-gray-50 rounded border border-gray-700 light:border-gray-200">
+                                <div class="p-2 bg-gray-50 dark:bg-gray-800/40 rounded border border-gray-200 dark:border-gray-700">
                                     <div class="grid grid-cols-2 gap-2 text-xs">
-                                        <div><span class="text-gray-400 light:text-gray-600">Product ID:</span> <span class="text-gray-200 light:text-gray-800 font-medium">${product.product_id || 'N/A'}</span></div>
-                                        <div><span class="text-gray-400 light:text-gray-600">Product Name:</span> <span class="text-gray-200 light:text-gray-800">${product.product_name || 'N/A'}</span></div>
-                                        ${product.description ? `<div class="col-span-2"><span class="text-gray-400 light:text-gray-600">Description:</span> <span class="text-gray-200 light:text-gray-800">${product.description}</span></div>` : ''}
+                                        <div><span class="text-gray-600 dark:text-gray-400">Product ID:</span> <span class="text-gray-800 dark:text-gray-200 font-medium">${product.product_id || 'N/A'}</span></div>
+                                        <div><span class="text-gray-600 dark:text-gray-400">Product Name:</span> <span class="text-gray-800 dark:text-gray-200">${product.product_name || 'N/A'}</span></div>
+                                        ${product.description ? `<div class="col-span-2"><span class="text-gray-600 dark:text-gray-400">Description:</span> <span class="text-gray-800 dark:text-gray-200">${product.description}</span></div>` : ''}
                                     </div>
                                 </div>
                             `;
                         });
                         html += '</div>';
                     } else {
-                        html = '<p class="text-xs text-gray-400 light:text-gray-500">No product data configured</p>';
+                        html = '<p class="text-xs text-gray-500 dark:text-gray-400">No product data configured</p>';
                     }
                     break;
 
@@ -647,21 +745,21 @@
                         html = '<div class="space-y-2">';
                         autoDataArray.forEach((autoItem, idx) => {
                             html += `
-                                <div class="p-2 bg-gray-800/40 light:bg-gray-50 rounded border border-gray-700 light:border-gray-200">
+                                <div class="p-2 bg-gray-50 dark:bg-gray-800/40 rounded border border-gray-200 dark:border-gray-700">
                                     <div class="grid grid-cols-2 gap-2 text-xs">
-                                        <div><span class="text-gray-400 light:text-gray-600">Tool Type:</span> <span class="text-gray-200 light:text-gray-800 font-medium">${autoItem.tool_type || 'N/A'}</span></div>
-                                        <div><span class="text-gray-400 light:text-gray-600">From Email:</span> <span class="text-gray-200 light:text-gray-800">${autoItem.from_email || 'N/A'}</span></div>
-                                        <div><span class="text-gray-400 light:text-gray-600">From Name:</span> <span class="text-gray-200 light:text-gray-800">${autoItem.from_name || 'N/A'}</span></div>
-                                        <div><span class="text-gray-400 light:text-gray-600">From Number:</span> <span class="text-gray-200 light:text-gray-800">${autoItem.from_number || 'N/A'}</span></div>
-                                        ${autoItem.email_cc ? `<div><span class="text-gray-400 light:text-gray-600">Email CC:</span> <span class="text-gray-200 light:text-gray-800">${autoItem.email_cc}</span></div>` : ''}
-                                        ${autoItem.email_bcc ? `<div><span class="text-gray-400 light:text-gray-600">Email BCC:</span> <span class="text-gray-200 light:text-gray-800">${autoItem.email_bcc}</span></div>` : ''}
+                                        <div><span class="text-gray-600 dark:text-gray-400">Tool Type:</span> <span class="text-gray-800 dark:text-gray-200 font-medium">${autoItem.tool_type || 'N/A'}</span></div>
+                                        <div><span class="text-gray-600 dark:text-gray-400">From Email:</span> <span class="text-gray-800 dark:text-gray-200">${autoItem.from_email || 'N/A'}</span></div>
+                                        <div><span class="text-gray-600 dark:text-gray-400">From Name:</span> <span class="text-gray-800 dark:text-gray-200">${autoItem.from_name || 'N/A'}</span></div>
+                                        <div><span class="text-gray-600 dark:text-gray-400">From Number:</span> <span class="text-gray-800 dark:text-gray-200">${autoItem.from_number || 'N/A'}</span></div>
+                                        ${autoItem.email_cc ? `<div><span class="text-gray-600 dark:text-gray-400">Email CC:</span> <span class="text-gray-800 dark:text-gray-200">${autoItem.email_cc}</span></div>` : ''}
+                                        ${autoItem.email_bcc ? `<div><span class="text-gray-600 dark:text-gray-400">Email BCC:</span> <span class="text-gray-800 dark:text-gray-200">${autoItem.email_bcc}</span></div>` : ''}
                                     </div>
                                 </div>
                             `;
                         });
                         html += '</div>';
                     } else {
-                        html = '<p class="text-xs text-gray-400 light:text-gray-500">No automation data configured</p>';
+                        html = '<p class="text-xs text-gray-500 dark:text-gray-400">No automation data configured</p>';
                     }
                     break;
 
@@ -672,12 +770,12 @@
                     if (Object.keys(outreachData).length > 0) {
                         html = `
                             <div class="grid grid-cols-2 gap-2 text-xs">
-                                <div><span class="text-gray-400 light:text-gray-600">Default Tone:</span> <span class="text-gray-200 light:text-gray-800 font-medium">${outreachData.default_tone || 'N/A'}</span></div>
-                                <div><span class="text-gray-400 light:text-gray-600">Few Shots:</span> <span class="text-gray-200 light:text-gray-800">${outreachData.fewshots ? 'Enabled' : 'Disabled'}</span></div>
-                                <div><span class="text-gray-400 light:text-gray-600">Strict Follow:</span> <span class="text-gray-200 light:text-gray-800">${outreachData.fewshots_strict_follow ? 'Yes' : 'No'}</span></div>
-                                <div><span class="text-gray-400 light:text-gray-600">Templates Count:</span> <span class="text-gray-200 light:text-gray-800">${outreachData.template_examples?.length || 0}</span></div>
-                                ${outreachData.max_drafts ? `<div><span class="text-gray-400 light:text-gray-600">Max Drafts:</span> <span class="text-gray-200 light:text-gray-800">${outreachData.max_drafts}</span></div>` : ''}
-                                ${outreachData.fewshots_location ? `<div class="col-span-2"><span class="text-gray-400 light:text-gray-600">Template File:</span> <span class="text-gray-200 light:text-gray-800">${outreachData.fewshots_location}</span></div>` : ''}
+                                <div><span class="text-gray-600 dark:text-gray-400">Default Tone:</span> <span class="text-gray-800 dark:text-gray-200 font-medium">${outreachData.default_tone || 'N/A'}</span></div>
+                                <div><span class="text-gray-600 dark:text-gray-400">Few Shots:</span> <span class="text-gray-800 dark:text-gray-200">${outreachData.fewshots ? 'Enabled' : 'Disabled'}</span></div>
+                                <div><span class="text-gray-600 dark:text-gray-400">Strict Follow:</span> <span class="text-gray-800 dark:text-gray-200">${outreachData.fewshots_strict_follow ? 'Yes' : 'No'}</span></div>
+                                <div><span class="text-gray-600 dark:text-gray-400">Templates Count:</span> <span class="text-gray-800 dark:text-gray-200">${outreachData.template_examples?.length || 0}</span></div>
+                                ${outreachData.max_drafts ? `<div><span class="text-gray-600 dark:text-gray-400">Max Drafts:</span> <span class="text-gray-800 dark:text-gray-200">${outreachData.max_drafts}</span></div>` : ''}
+                                ${outreachData.fewshots_location ? `<div class="col-span-2"><span class="text-gray-600 dark:text-gray-400">Template File:</span> <span class="text-gray-800 dark:text-gray-200">${outreachData.fewshots_location}</span></div>` : ''}
                             </div>
                         `;
 
@@ -687,17 +785,17 @@
                             const fileLocation = String(outreachData.fewshots_location);
                             const escapedPath = fileLocation.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
                             html += `
-                                <div class="mt-3 pt-3 border-t border-gray-700 light:border-gray-200">
+                                <div class="mt-3 pt-3 border-t border-gray-200 dark:border-gray-700">
                                     <button onclick="sendPrompt(this, 'Use tool @FS-File-Read to read file: ${escapedPath}')"
                                             class="px-3 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-200">
                                         <i class="fas fa-file-alt mr-1"></i>View Template File
                                     </button>
-                                    <p class="text-xs text-gray-400 light:text-gray-600 mt-1">File: <code class="text-gray-300 light:text-gray-700">${fileLocation}</code></p>
+                                    <p class="text-xs text-gray-600 dark:text-gray-400 mt-1">File: <code class="text-gray-700 dark:text-gray-300">${fileLocation}</code></p>
                                 </div>
                             `;
                         }
                     } else {
-                        html = '<p class="text-xs text-gray-400 light:text-gray-500">No initial outreach settings configured</p>';
+                        html = '<p class="text-xs text-gray-500 dark:text-gray-400">No initial outreach settings configured</p>';
                     }
                     break;
 
@@ -707,14 +805,14 @@
                     if (Object.keys(followUpData).length > 0) {
                         html = `
                             <div class="grid grid-cols-2 gap-2 text-xs">
-                                <div><span class="text-gray-400 light:text-gray-600">Max Follow-ups:</span> <span class="text-gray-200 light:text-gray-800 font-medium">${followUpData.max_follow_ups ?? 'N/A'}</span></div>
-                                <div><span class="text-gray-400 light:text-gray-600">Days Between:</span> <span class="text-gray-200 light:text-gray-800">${followUpData.days_between_follow_ups ?? 'N/A'}</span></div>
-                                <div><span class="text-gray-400 light:text-gray-600">Tone:</span> <span class="text-gray-200 light:text-gray-800">${followUpData.tone || 'N/A'}</span></div>
-                                ${followUpData.enabled !== undefined ? `<div><span class="text-gray-400 light:text-gray-600">Enabled:</span> <span class="text-gray-200 light:text-gray-800">${followUpData.enabled ? 'Yes' : 'No'}</span></div>` : ''}
+                                <div><span class="text-gray-600 dark:text-gray-400">Max Follow-ups:</span> <span class="text-gray-800 dark:text-gray-200 font-medium">${followUpData.max_follow_ups ?? 'N/A'}</span></div>
+                                <div><span class="text-gray-600 dark:text-gray-400">Days Between:</span> <span class="text-gray-800 dark:text-gray-200">${followUpData.days_between_follow_ups ?? 'N/A'}</span></div>
+                                <div><span class="text-gray-600 dark:text-gray-400">Tone:</span> <span class="text-gray-800 dark:text-gray-200">${followUpData.tone || 'N/A'}</span></div>
+                                ${followUpData.enabled !== undefined ? `<div><span class="text-gray-600 dark:text-gray-400">Enabled:</span> <span class="text-gray-800 dark:text-gray-200">${followUpData.enabled ? 'Yes' : 'No'}</span></div>` : ''}
                             </div>
                         `;
                     } else {
-                        html = '<p class="text-xs text-gray-400 light:text-gray-500">No follow-up settings configured</p>';
+                        html = '<p class="text-xs text-gray-500 dark:text-gray-400">No follow-up settings configured</p>';
                     }
                     break;
 
@@ -722,12 +820,12 @@
                     // Try to display any other settings dynamically
                     const settingData = settings[`gs_team_${settingKey.replace('_configured', '')}`];
                     if (settingData) {
-                        html = `<pre class="text-xs text-gray-200 light:text-gray-700 overflow-x-auto">${JSON.stringify(settingData, null, 2)}</pre>`;
+                        html = `<pre class="text-xs text-gray-700 dark:text-gray-200 overflow-x-auto">${JSON.stringify(settingData, null, 2)}</pre>`;
                     }
                     break;
             }
 
-            return html || '<p class="text-xs text-gray-400 light:text-gray-500">No details available</p>';
+            return html || '<p class="text-xs text-gray-500 dark:text-gray-400">No details available</p>';
         }
 
         function getAdditionalConfigItems(settingsData) {
@@ -778,7 +876,7 @@
             let productsHtml = '';
             if (products.length === 0) {
                 productsHtml = `
-                    <p class="text-sm text-gray-200 light:text-gray-500 mb-3">No products in catalog.</p>
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">No products in catalog.</p>
                     <button onclick="sendPrompt(this, 'Use tool @FS-Product-Create to create a product.')"
                             class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-md transition-colors duration-200 flex items-center gap-2">
                         <i class="fas fa-plus"></i>
@@ -790,7 +888,7 @@
                     const isLinked = Boolean(product.linked);
                     const productId = `product-${idx}`;
                     const bgColor = isLinked ? 'bg-green-50' : 'bg-yellow-50';
-                    const borderColor = isLinked ? 'border-green-200' : 'border-yellow-200';
+                    const borderColor = isLinked ? 'border-green-200 dark:border-green-700' : 'border-yellow-200 dark:border-yellow-700';
                     const badge = isLinked ? '<span class="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">Linked</span>' : '<span class="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full">Not Linked</span>';
 
                     // Escape quotes for safe use in onclick handlers
@@ -798,24 +896,24 @@
 
                     productsHtml += `
                         <div class="space-y-2">
-                            <div class="flex items-center justify-between p-3 rounded-lg bg-gray-800/60 light:bg-white border border-gray-700 light:border-gray-200">
+                            <div class="flex items-center justify-between p-3 rounded-lg bg-white dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700">
                                 <div class="flex-1">
-                                    <p class="text-sm font-medium text-gray-100 light:text-gray-900">${product.name}</p>
-                                    <p class="text-xs text-gray-400 light:text-gray-600">$${getSafeNumber(product.price).toFixed(2)}</p>
+                                    <p class="text-sm font-medium text-gray-900 dark:text-gray-100">${product.name}</p>
+                                    <p class="text-xs text-gray-600 dark:text-gray-400">$${getSafeNumber(product.price).toFixed(2)}</p>
                                 </div>
                                 <div class="flex items-center gap-2">
                                     ${badge}
-                                    <button id="product-toggle-btn-${productId}" onclick="toggleProductDetail('${productId}')" class="px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 light:bg-gray-200 light:hover:bg-gray-300 text-white light:text-gray-800 rounded-md transition-colors duration-200"><i class="fas fa-eye text-xs"></i></button>
+                                    <button id="product-toggle-btn-${productId}" onclick="toggleProductDetail('${productId}')" class="px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-white rounded-md transition-colors duration-200"><i class="fas fa-eye text-xs"></i></button>
                                     ${isLinked ? '' : `<button onclick="sendPrompt(this, 'Use tool @FS-TeamSettings-Update to link ${escapedName} in Sales Settings.')" class="px-2 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-200"><i class="fas fa-link text-xs"></i></button>`}
                                 </div>
                             </div>
-                            <div id="product-detail-${productId}" class="hidden ml-3 pl-3 pr-3 pb-3 pt-2 bg-gray-900/40 light:bg-gray-50 border-l-2 ${borderColor} rounded">
+                            <div id="product-detail-${productId}" class="hidden ml-3 pl-3 pr-3 pb-3 pt-2 bg-gray-50 dark:bg-gray-900/40 border-l-2 ${borderColor} rounded">
                                 <div class="grid grid-cols-2 gap-2 text-xs">
-                                    <div><span class="text-gray-400 light:text-gray-600">Product Name:</span> <span class="text-gray-200 light:text-gray-800 font-medium">${product.name}</span></div>
-                                    <div><span class="text-gray-400 light:text-gray-600">Price:</span> <span class="text-gray-200 light:text-gray-800">$${getSafeNumber(product.price).toFixed(2)}</span></div>
-                                    <div><span class="text-gray-400 light:text-gray-600">Status:</span> <span class="text-gray-200 light:text-gray-800">${isLinked ? 'Linked to Workspace' : 'Not Linked'}</span></div>
+                                    <div><span class="text-gray-600 dark:text-gray-400">Product Name:</span> <span class="text-gray-800 dark:text-gray-200 font-medium">${product.name}</span></div>
+                                    <div><span class="text-gray-600 dark:text-gray-400">Price:</span> <span class="text-gray-800 dark:text-gray-200">$${getSafeNumber(product.price).toFixed(2)}</span></div>
+                                    <div><span class="text-gray-600 dark:text-gray-400">Status:</span> <span class="text-gray-800 dark:text-gray-200">${isLinked ? 'Linked to Workspace' : 'Not Linked'}</span></div>
                                 </div>
-                                <div class="mt-2 pt-2 border-t border-gray-700 light:border-gray-200">
+                                <div class="mt-2 pt-2 border-t border-gray-200 dark:border-gray-700">
                                     <button onclick="sendPrompt(this, 'Use tool @FS-Product-View to view full product details for ${escapedName}.')" class="px-3 py-1 text-xs bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-200">
                                         <i class="fas fa-file-alt mr-1"></i>View Full Details
                                     </button>
@@ -830,7 +928,7 @@
             let processesHtml = '';
             if (processes.length === 0) {
                 processesHtml = `
-                    <p class="text-sm text-gray-200 light:text-gray-500 mb-3">No recent processes.</p>
+                    <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">No recent processes.</p>
                     <button onclick="sendPrompt(this, 'Use tool @FS-Process-Create to start a sales process.')"
                             class="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white text-sm rounded-md transition-colors duration-200 flex items-center gap-2">
                         <i class="fas fa-rocket"></i>
@@ -849,10 +947,10 @@
                 processes.forEach(process => {
                     const statusColor = statusColors[process.status] || 'bg-gray-100 text-gray-800';
                     processesHtml += `
-                        <div class="flex items-center justify-between p-3 bg-gray-800/60 light:bg-gray-50 border border-gray-700 light:border-gray-200 rounded-lg">
+                        <div class="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-lg">
                             <div class="flex-1">
-                                <p class="text-sm font-medium text-gray-100 light:text-gray-900">${process.customer_display}</p>
-                                <p class="text-xs text-gray-400 light:text-gray-600">ID: ${process.task_id_short}</p>
+                                <p class="text-sm font-medium text-gray-900 dark:text-gray-100">${process.customer_display}</p>
+                                <p class="text-xs text-gray-600 dark:text-gray-400">ID: ${process.task_id_short}</p>
                             </div>
                             <div class="flex items-center gap-2">
                                 <span class="text-xs ${statusColor} px-2 py-1 rounded-full">${process.status}</span>
@@ -879,7 +977,7 @@
             const allConfigItems = [...sortedConfigItems, ...additionalConfigItems];
 
             if (allConfigItems.length === 0) {
-                checklistHtml = '<p class="text-sm text-gray-400 light:text-gray-500">No configuration items available.</p>';
+                checklistHtml = '<p class="text-sm text-gray-500 dark:text-gray-400">No configuration items available.</p>';
             }
 
             // Add separator if we have both required and additional items
@@ -889,8 +987,8 @@
                 // Add separator before additional items
                 if (!hasAddedSeparator && index === sortedConfigItems.length && additionalConfigItems.length > 0) {
                     checklistHtml += `
-                        <div class="my-4 pt-3 border-t border-gray-700 light:border-gray-200">
-                            <p class="text-xs font-semibold text-gray-300 light:text-gray-700 mb-3">Additional Settings</p>
+                        <div class="my-4 pt-3 border-t border-gray-200 dark:border-gray-700">
+                            <p class="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-3">Additional Settings</p>
                         </div>
                     `;
                     hasAddedSeparator = true;
@@ -907,8 +1005,8 @@
                 const isConfigured = item.configured;
                 const icon = isConfigured ? 'fa-check-circle' : 'fa-times-circle';
                 const iconColor = isConfigured ? 'text-green-600' : 'text-red-600';
-                const bgColor = isConfigured ? 'bg-green-900/30 light:bg-green-50' : 'bg-red-900/30 light:bg-red-50';
-                const borderColor = isConfigured ? 'border-green-700 light:border-green-200' : 'border-red-700 light:border-red-200';
+                const bgColor = isConfigured ? 'bg-green-50 dark:bg-green-900/30' : 'bg-red-50 dark:bg-red-900/30';
+                const borderColor = isConfigured ? 'border-green-200 dark:border-green-700' : 'border-red-200 dark:border-red-700';
                 const status = isConfigured ? 'Configured' : 'Not Configured';
 
                 // Pre-generate details HTML for configured items
@@ -926,7 +1024,7 @@
                     </button>
                 ` : `
                     <button id="toggle-btn-${item.key}" onclick="toggleSettingDetail('${item.key}')"
-                            class="ml-2 px-2 py-1 text-xs bg-gray-700 hover:bg-gray-600 light:bg-gray-200 light:hover:bg-gray-300 text-white light:text-gray-800 rounded-md transition-colors duration-200">
+                            class="ml-2 px-2 py-1 text-xs bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-800 dark:text-white rounded-md transition-colors duration-200">
                         <i class="fas fa-eye-slash text-xs"></i>
                     </button>
                 `;
@@ -934,16 +1032,16 @@
                 checklistHtml += `
                     <div class="space-y-2">
                         <div class="flex items-center p-3 ${bgColor} border ${borderColor} rounded-lg">
-                            <i class="fas ${item.icon} text-gray-300 light:text-gray-600 mr-3"></i>
+                            <i class="fas ${item.icon} text-gray-600 dark:text-gray-300 mr-3"></i>
                             <div class="flex-1">
-                                <p class="text-sm font-medium text-gray-100 light:text-gray-900">${item.label}</p>
-                                <p class="text-xs text-gray-400 light:text-gray-600">${status}</p>
+                                <p class="text-sm font-medium text-gray-900 dark:text-gray-100">${item.label}</p>
+                                <p class="text-xs text-gray-600 dark:text-gray-400">${status}</p>
                             </div>
                             <i class="fas ${icon} ${iconColor} text-xl"></i>
                             ${actionBtn}
                         </div>
                         ${isConfigured ? `
-                        <div id="setting-detail-${item.key}" class="ml-3 pl-3 pr-3 pb-3 pt-2 bg-gray-900/40 light:bg-gray-50 border-l-2 ${borderColor} rounded">
+                        <div id="setting-detail-${item.key}" class="ml-3 pl-3 pr-3 pb-3 pt-2 bg-gray-50 dark:bg-gray-900/40 border-l-2 ${borderColor} rounded">
                             ${detailsHtml}
                         </div>
                         ` : ''}
@@ -957,31 +1055,31 @@
                         <button class="tab-button border-fuse-green-500 text-fuse-green-600 py-3 px-1 border-b-2 font-medium text-sm" data-tab="products" onclick="switchTab('products')">
                             <i class="fas fa-box mr-1"></i>Products
                         </button>
-                        <button class="tab-button border-transparent text-gray-300 light:text-gray-500 hover:text-gray-400 light:hover:text-gray-700 py-3 px-1 border-b-2 font-medium text-sm" data-tab="processes" onclick="switchTab('processes')">
+                        <button class="tab-button border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-400 py-3 px-1 border-b-2 font-medium text-sm" data-tab="processes" onclick="switchTab('processes')">
                             <i class="fas fa-cogs mr-1"></i>Recent Processes
                         </button>
-                        <button class="tab-button border-transparent text-gray-300 light:text-gray-500 hover:text-gray-400 light:hover:text-gray-700 py-3 px-1 border-b-2 font-medium text-sm" data-tab="configuration" onclick="switchTab('configuration')">
+                        <button class="tab-button border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-300 dark:hover:text-gray-400 py-3 px-1 border-b-2 font-medium text-sm" data-tab="configuration" onclick="switchTab('configuration')">
                             <i class="fas fa-sliders-h mr-1"></i>Configuration
                         </button>
                     </nav>
                 </div>
                 <div class="p-4">
                     <div id="products-content" class="tab-content">
-                        <h4 class="text-sm font-semibold text-gray-100 light:text-gray-900 mb-3">Product Catalog</h4>
+                        <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Product Catalog</h4>
                         <div class="space-y-2">${productsHtml}</div>
                     </div>
                     <div id="processes-content" class="tab-content hidden">
-                        <h4 class="text-sm font-semibold text-gray-100 light:text-gray-900 mb-3">Recent Sales Processes</h4>
+                        <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3">Recent Sales Processes</h4>
                         <div class="space-y-2">${processesHtml}</div>
                     </div>
                     <div id="configuration-content" class="tab-content hidden">
                         <div class="flex items-center justify-between mb-3">
                             <div class="flex items-center gap-2">
-                                <h4 class="text-sm font-semibold text-gray-100 light:text-gray-900">Configuration Checklist</h4>
+                                <h4 class="text-sm font-semibold text-gray-900 dark:text-gray-100">Configuration Checklist</h4>
                                 <span class="text-xs bg-${statusColor}-100 text-${statusColor}-800 px-3 py-1 rounded-full font-medium">${statusText}</span>
                             </div>
                         </div>
-                        <p class="text-xs text-gray-400 light:text-gray-600 mb-3">Click the eye icon on configured items to view details.</p>
+                        <p class="text-xs text-gray-600 dark:text-gray-400 mb-3">Click the eye icon on configured items to view details.</p>
                         <div id="config-checklist" class="space-y-3">${checklistHtml}</div>
                     </div>
                 </div>
@@ -990,10 +1088,10 @@
             } catch (error) {
                 console.error('Error rendering tabs:', error);
                 document.getElementById('tabs').innerHTML = `
-                    <div class="p-4 bg-red-900/30 light:bg-red-50 border border-red-700 light:border-red-200 rounded-lg">
-                        <p class="text-sm font-medium text-red-200 light:text-red-900 mb-2">Error rendering tabs</p>
-                        <p class="text-xs text-red-300 light:text-red-700">${error.message}</p>
-                        <p class="text-xs text-gray-400 light:text-gray-600 mt-2">Check browser console for details</p>
+                    <div class="p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-lg">
+                        <p class="text-sm font-medium text-red-900 dark:text-red-200 mb-2">Error rendering tabs</p>
+                        <p class="text-xs text-red-700 dark:text-red-300">${error.message}</p>
+                        <p class="text-xs text-gray-600 dark:text-gray-400 mt-2">Check browser console for details</p>
                     </div>
                 `;
             }
