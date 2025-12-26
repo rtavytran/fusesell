@@ -2,6 +2,24 @@
 
 All notable changes to FuseSell Local will be documented in this file.
 
+# [Unreleased] - 2025-12-26
+
+### Improved
+- **Enhanced HTML formatting in email generation**: Updated `email_generation` prompt in `default_prompts.json` with explicit HTML structure requirements
+  - Added CRITICAL HTML FORMATTING REQUIREMENTS section with mandatory structure examples
+  - Now requires separate `<p>` tags for each paragraph (greeting, introduction, body, CTA, signature)
+  - Enforces proper `<ul>` and `<li>` tags for bullet points (no more plain text dashes)
+  - Provides clear examples of correct vs incorrect HTML formatting
+  - Fixes issue where all email content was generated in a single `<p>` tag with plain text bullets
+
+### Removed
+- **Cleaned up legacy code with hardcoded prompts**: Removed 4 unused methods from `initial_outreach.py`
+  - Removed: `_generate_single_email_draft()`, `_create_email_generation_prompt()`, `_generate_subject_lines()`, `_generate_fallback_subject_lines()`
+  - These methods contained hardcoded LLM prompts and were not being used anywhere in the codebase
+  - All email generation now exclusively uses the proper prompt system via `get_prompt_template()`
+  - Prompt loading priority: `fusesell_data/config/prompts.json` (custom) > `fusesell_local/config/default_prompts.json` (default)
+  - See TEMPLATE_USAGE_GUIDE.md for details on the prompt configuration system
+
 # [1.3.37] - 2025-12-19
 
 ### Improved
